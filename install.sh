@@ -27,6 +27,8 @@ sudo ./install
 echo "Installing Aircrack-ng..."
 sudo apt install -y aircrack-ng > /dev/null
 
+clear
+
 # Confirmar instalacion de las dependencias
 echo "Installation completed. Verify dependencies:"
 echo " - Python3: $(python3 --version)"
@@ -36,3 +38,5 @@ echo " - BeefProject: Verify installation in the 'beef/' directory"
 echo " - Aircrack-ng: $(aircrack-ng --help | head -n 1)"
 echo "All dependencies are installed."
 
+echo "Configurando scripts..."
+chmod +x netscan.sh
