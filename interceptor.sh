@@ -124,6 +124,13 @@ manager_mode(){
     fi
 }
 
+BSSID_VAR=""
+CHANNEL_VAR=""
+PRIVACY_VAR=""
+CIPHER_VAR=""
+AUTH_VAR=""
+BEACONS_VAR=""
+ESSID_VAR=""
 
 select_wireless(){
     
@@ -131,7 +138,10 @@ select_wireless(){
         echo "Not in monitor mode"
         sleep 3    
     else
+        
+        
         rm ./data_collected/network_dump/*
+        
         if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
             # Estamos en un entorno gráfico
             x-terminal-emulator -e "sudo timeout 25 airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one"
@@ -143,18 +153,66 @@ select_wireless(){
         if [[ ! -f "./data_collected/network_dump/networks-01.csv" ]];then
             echo "File csv with network not found"
             exit 1
-        else    
-            echo "Archivo encontrado"
         fi
-
-        sleep 2
+        
 
         cd  ./data_collected/network_dump/
-        `awk -F',' '{print $1}' networks-01.csv >> BSSID_tmp.txt`
-        `awk -F',' '{print $14}' networks-01.csv >> ESSID_tmp.txt`
-        `awk -F',' '{print $7}' networks-01.csv >> Cipher_tmp.txt`
-        `awk -F',' '{print $10}' networks-01.csv >> beacons_tmp.txt`
-        sleep 3
+        FILE="networks-01.csv"
+
+        #Borrar informacion que no nos interesa.
+        sed -i '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$d' $FILE
+
+        # Declarar un array vacío
+        declare -a NETWORKS
+
+        # Contador de filas (ID)
+        COUNT=0
+
+        # Leer el archivo línea por línea usando 'process substitution'
+        while IFS=',' read -r BSSID FirstSeen LastSeen Channel Speed Privacy Cipher Auth Power Beacons IV LAN_IP ID_Length ESSID Key; do
+            # Solo almacenar hay algun campo con informacion, si todo es vacio no almazenara.
+            if [[ -n "$BSSID" && -n "$Channel" && -n "$Privacy" && -n "$Cipher" && -n "$Auth" && -n "$Beacons" && -n "$ESSID" ]]; then
+                # Guardar todos los datos en el array (para referencia interna)
+                NETWORKS+=("$BSSID,$Channel,$Privacy,$Cipher,$Auth,$Beacons,$ESSID")
+
+                # Formatear solo los datos a mostrar
+                LINE=$(printf "%-20s %-18s %-10s %-7s %-10s" "$BSSID" "$ESSID" "$Privacy" "$Beacons" "$Cipher")
+                
+                # Mostrar en pantalla
+                echo "$COUNT  $LINE"
+
+                # Incrementar el contador
+                COUNT=$((COUNT + 1))
+            fi
+        done < <(tail -n +2 "$FILE")  # Leer desde la segunda línea
+
+        # Solicitar entrada del usuario
+        read -p "Introduce un número de ID para ver su información: " USER_ID
+
+        # Mostrar la información correspondiente al ID
+        if [[ $USER_ID =~ ^[0-9]+$ ]] && [[ $USER_ID -ge 1 ]] && [[ $USER_ID -lt ${#NETWORKS[@]} ]]; then
+            echo "Información completa seleccionada:"
+            IFS=',' read -r BSSID Channel Privacy Cipher Auth Beacons ESSID <<< "${NETWORKS[$USER_ID]}"
+
+            BSSID_VAR="$BSSID"
+            CHANNEL_VAR="$Channel"
+            PRIVACY_VAR="$Privacy"
+            CIPHER_VAR="$Cipher"
+            AUTH_VAR="$Auth"
+            BEACONS_VAR="$Beacons"
+            ESSID_VAR="$ESSID"
+
+            echo "$BSSID_VAR $ESSID_VAR"
+
+        else
+            echo "ID inválido."
+        fi
+
+        rm $FILE
+        
+        cd .. && cd ..        
+
+
     fi
 }
 
@@ -179,6 +237,12 @@ menu(){
         else
             MODE=$(iwconfig "$MON_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
             echo "You haved selected the interface: $MON_INTERFACE  in Mode: $MODE"
+        fi
+
+        if [[ -z "$BSSID_VAR" ]];then
+            echo "You don't have any Wireless network selected"
+        else
+            echo "You have the wireless network $ESSID_VAR selected with the BSSID: $BSSID_VAR with the privacy type: $PRIVACY_VAR"
         fi
 
         echo ""
@@ -218,7 +282,7 @@ menu(){
             8) echo ""; uptime ;;
             9) echo ""; uname -r ;;
             0) echo "👋 Goodbye..."; exit 0 ;;
-            *) echo "❌ Not valid option."; sleep 2 ;;
+            *) echo "❌ Not valid option." ; sleep 2 ;;
         esac
     done
 
