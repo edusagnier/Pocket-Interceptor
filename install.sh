@@ -1,42 +1,54 @@
 #!/bin/bash
+test_requirements(){
+    
+    clear
+    echo "Verifing if requirement software it's installed"
+    REQUIRED_FILE="requirements.txt"
+    # Verificar si el archivo existe
+    if [[ ! -f "$REQUIRED_FILE" ]]; then
+        echo "Error: Not found $REQUIRED_FILE"
+        exit 1
+    fi
 
-# Actualizar repositorios, suprimo la salida estandar para que quede mas limpio exceptuando errores
-echo "Updating repositories..."
-sudo apt update -y > /dev/null
+    # Leer la lista de paquetes desde el archivo
+    REQUIRED_PKGS=($(grep -vE '^\s*#' "$REQUIRED_FILE" | tr '\n' ' '))
 
-# Instalar python3 y ipi
-echo "Installing Python3 and pip..."
-sudo apt install -y python3 python3-pip
+    # Verificar que paquetes faltan
+    MISSING_PKGS=()
+    for pkg in "${REQUIRED_PKGS[@]}"; do
+        if ! dpkg -l | grep -qw "$pkg"; then
+            MISSING_PKGS+=("$pkg")
+        fi
+    done
 
-# Instalar las librerias necesarias
-echo "Installing Python dependencies with pip..."
-pip3 install --upgrade pip
-pip3 install subprocess
+    #Instalar paquetes que no estan installados.
+    if [[ ${#MISSING_PKGS[@]} -ne 0 ]]; then
+        echo "Installing missing packets: ${MISSING_PKGS[*]}"
+        apt update > /dev/null 2>&1 && apt install -y "${MISSING_PKGS[@]}" > /dev/null 2>&1 # En passivo para que no salga por la linea de comandos.
+    fi
 
-# Instalar nmap
-echo "Installing Nmap..."
-sudo apt install -y nmap > /dev/null
+    FAILED_PKGS=()
+    echo "🔍 Checking packages installation..."
+    for pkg in "${REQUIRED_PKGS[@]}"; do
+        if dpkg -l | grep -qw "$pkg"; then
+            echo "✅ $pkg installed correctly"
+        else
+            echo "❌ $pkg can't get installed"
+            FAILED_PKGS+=("$pkg")
+        fi
+    done
 
-# Instalar BeefProject
-echo "Installing BeefProject..."
-git clone https://github.com/beefproject/beef.git
-cd beef
-sudo ./install
+    # Si hay paquetes que no se instalaron correctamente, mostrar error y salir
+    if [[ ${#FAILED_PKGS[@]} -ne 0 ]]; then
+        echo "Error: The following packages could not be installed: ${FAILED_PKGS[*]}"
+        echo "Please try installing them manually with:"
+        echo "sudo apt install -y ${FAILED_PKGS[*]}"
+        return 1
+    fi
+    sleep 3
 
-# Instalar Aircrack-ng
-echo "Installing Aircrack-ng..."
-sudo apt install -y aircrack-ng > /dev/null
+    echo "Configurando scripts..."
+    chmod +x netscan.py
+    return 0
+}
 
-clear
-
-# Confirmar instalacion de las dependencias
-echo "Installation completed. Verify dependencies:"
-echo " - Python3: $(python3 --version)"
-echo " - Pip: $(pip3 --version)"
-echo " - Nmap: $(nmap --version | head -n 1)"
-echo " - BeefProject: Verify installation in the 'beef/' directory"
-echo " - Aircrack-ng: $(aircrack-ng --help | head -n 1)"
-echo "All dependencies are installed."
-
-echo "Configurando scripts..."
-chmod +x netscan.py

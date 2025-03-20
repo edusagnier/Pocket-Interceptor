@@ -34,6 +34,8 @@ def check_cve(service, version):
     if response.status_code == 200:
         data = response.json()
         return [cve["id"] for cve in data["data"]]
+    else:
+        print("Cant connect to the page!!!!")
 
 if __name__ == "__main__":
     net_select()
