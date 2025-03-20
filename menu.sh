@@ -73,6 +73,7 @@ test_requirements(){
 }
 
 SELECTED_INTERFACE=""
+MON_INTERFACE=""
 
 select_interface(){    
     clear
@@ -109,13 +110,62 @@ select_interface(){
 
 monitor_mode(){
 
- airmon-ng start $SELECTED_INTERFACE; SELECTED_INTERFACE="${SELECTED_INTERFACE}mon"
+    if echo "$SELECTED_INTERFACE" | grep -q "mon"; then
+        MON_INTERFACE=$SELECTED_INTERFACE
+        echo "It's already in monitor mode"
+        SELECTED_INTERFACE="${SELECTED_INTERFACE//mon/}"
+        sleep 2
 
+    else
+        echo "[+] Activating monitor mode in $SELECTED_INTERFACE..."
+        sudo airmon-ng start "$SELECTED_INTERFACE" &>/dev/null
+        
+        # Verificar si la interfaz en modo monitor se creó
+        MON_INTERFACE="${SELECTED_INTERFACE}mon"
+        if iwconfig "$MON_INTERFACE" &>/dev/null; then
+            echo "[✓] Monitor mode activated in $MON_INTERFACE"
+        else
+            echo "[✗] Error: Monitor mode could not be activated"
+            exit 1
+        fi
+        sleep 2
+    fi
+    
+    
 }
 
 manager_mode(){
+    
+    if echo "$MON_INTERFACE" | grep -q "mon"; then
+        echo "[+] Disabling monitor mode in $MON_INTERFACE..."
+        
+        sudo airmon-ng stop "$MON_INTERFACE" &>/dev/null
 
- airmon-ng stop "$SELECTED_INTERFACE"
+        if iwconfig "$SELECTED_INTERFACE" &>/dev/null; then
+            echo "[✓] Manager mode activated in $SELECTED_INTERFACE"
+        else
+            echo "[✗] Failed to return to management mode"
+            exit 1
+        fi
+        MON_INTERFACE=""
+        sleep 2
+    else
+        echo "The interface is already in monitor mode"
+        sleep 2
+    fi
+}
+
+
+select_wireless(){
+
+    echo "selecting"
+    
+    if [[ -z "$MON_INTERFACE" ]];then
+        echo "Not in monitor mode"
+        exit 1
+    fi
+
+    x-terminal-emulator -e "sudo timeout 15 airodump-ng -w captura --output-format csv $MON_INTERFACE"
 
 }
 
@@ -127,14 +177,22 @@ menu(){
         select_interface
     fi
     
-    BOOL_SELECTION=true0
+    BOOL_SELECTION=true
 
 
     while $BOOL_SELECTION; do
         
-        MODE=$(iwconfig "$SELECTED_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
         clear
-        echo "You haved selected the interface: $SELECTED_INTERFACE  in Mode: $MODE"
+        if [[ -z "$MON_INTERFACE" ]];then
+            
+            MODE=$(iwconfig "$SELECTED_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
+            echo "You haved selected the interface: $SELECTED_INTERFACE  in Mode: $MODE"
+
+        else
+            MODE=$(iwconfig "$MON_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
+            echo "You haved selected the interface: $MON_INTERFACE  in Mode: $MODE"
+        fi
+
         echo ""
         echo "+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
         echo "|M|e|n|u| |I|n|t|e|r|c|e|p|t|o|r|"
@@ -159,13 +217,13 @@ menu(){
         echo "- - - - - - - - - - - - - - - - - -"
         echo ""
         echo ""
-        read -p "Select the option you want:" SELECTION
+        read -p "Select the option you want: " SELECTION
 
         case $SELECTION in
-            1) echo ""; select_interface ;;
-            2) echo "Changing mode"; monitor_mode;;
-            3) echo "Changing mode"; manager_mode ;;
-            4) echo ""; ps aux | less ;;
+            1) select_interface ;;
+            2) monitor_mode;;
+            3) manager_mode ;;
+            4) select_wireless ;;
             5) echo ""; curl -s ifconfig.me ;;
             6) echo ""; hostname -I ;;
             7) echo ""; free -h ;;
