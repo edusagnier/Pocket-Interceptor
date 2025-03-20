@@ -39,4 +39,4 @@ echo " - Aircrack-ng: $(aircrack-ng --help | head -n 1)"
 echo "All dependencies are installed."
 
 echo "Configurando scripts..."
-chmod +x netscan.sh
+chmod +x netscan.py
