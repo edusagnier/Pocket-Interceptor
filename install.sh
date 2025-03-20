@@ -52,3 +52,5 @@ test_requirements(){
     return 0
 }
 
+
+test_requirements

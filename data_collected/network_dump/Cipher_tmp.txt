@@ -1,0 +1,22 @@
+
+ Cipher
+ CCMP
+ CCMP TKIP
+ CCMP
+ CCMP
+ CCMP
+ CCMP
+ CCMP
+ CCMP TKIP
+ CCMP TKIP
+ CCMP
+ 
+ CCMP TKIP
+ CCMP
+ CCMP
+
+ Probed ESSIDs
+
+
+
+
