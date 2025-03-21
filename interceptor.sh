@@ -216,6 +216,22 @@ select_wireless(){
     fi
 }
 
+
+Deauther(){
+
+if [[ -z "$BSSID" ]];then
+    echo "There's not a BSSID in usage"
+    exit 1
+fi
+
+if [[ -z "$Channel" ]];then
+    echo "There's not a Channel set in usage"
+    exit 1
+fi
+
+sleep 2
+}
+
 menu(){
    
     if ./install.sh; then
@@ -276,7 +292,7 @@ menu(){
             2) monitor_mode;;
             3) manager_mode ;;
             4) select_wireless ;;
-            5) echo ""; curl -s ifconfig.me ;;
+            5) Deauther ;;
             6) echo ""; hostname -I ;;
             7) echo ""; free -h ;;
             8) echo ""; uptime ;;

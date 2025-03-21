@@ -1,0 +1,16 @@
+ 192.168.3.101   3c:52:a1:3c:5f:74      1      60  Unknown vendor
+ 192.168.3.14    3c:52:a1:3c:5f:7c      1      60  Unknown vendor
+ 192.168.3.1     54:52:84:23:85:73      1      60  Huawei Device Co., Ltd.
+ 192.168.3.15    ec:b5:fa:09:9f:c8      1      60  Philips Lighting BV
+ 192.168.3.21    04:7c:16:87:80:16      1      60  Micro-Star INTL CO., LTD.
+ 192.168.3.2     24:4c:e3:6b:2b:1b      1      60  Amazon Technologies Inc.
+ 192.168.3.22    68:13:f3:4b:d4:dc      1      60  Unknown vendor
+ 192.168.3.23    e0:01:c7:c9:48:40      1      60  Unknown vendor
+ 192.168.3.33    68:9a:87:dd:3e:91      1      60  Amazon Technologies Inc.
+ 192.168.3.103   68:9a:87:d4:2f:48      1      60  Amazon Technologies Inc.
+ 192.168.3.104   b4:e4:54:15:ca:6a      1      60  Amazon Technologies Inc.
+ 192.168.3.153   06:cc:51:90:c0:db      1      60  Unknown vendor
+ 192.168.3.156   da:d0:ea:5b:4b:82      1      60  Unknown vendor
+ 192.168.3.155   b8:1e:a4:3f:98:bb      1      60  Unknown vendor
+
+-- Active scan completed, 14 Hosts found.

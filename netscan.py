@@ -42,7 +42,7 @@ def results(devices):
         for ip, ports in devices.items():
             print(f" IP: {ip}")
             for port, service, version in ports:
-                print(f"   -> {port}: {service} ({version})")
+                print(f"   -> {port}: {service} (Version: {version})")
                 cves = check_cve(service, version)
                 if cves:
                     print("      CVEs Found:")
@@ -79,6 +79,10 @@ def devscan(ip_address):
     
     return {ip_address: device_info}
 
+
+def netdisc():
+    subprocess.run(["bash", "netdisc.sh"])
+
 def menu():
     print("\nNetwork Scanner Menu:")
     print("1. Scan the entire network")
@@ -97,7 +101,7 @@ def menu():
         devices = devscan(ip_address)
         results(devices)
     elif choice == "3":
-        print("Finding devices...")
+        netdisc()
     elif choice == "4":
         print("Exiting...")
         exit()
