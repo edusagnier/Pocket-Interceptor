@@ -144,10 +144,10 @@ select_wireless(){
         
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
         # Estamos en un entorno gráfico
-        x-terminal-emulator -e "sudo timeout 25 airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one"
+        x-terminal-emulator -e "sudo timeout 25 airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg"
     else
         # No hay entorno gráfico, ejecutarlo en la terminal actual
-        sudo timeout 10 airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one
+        sudo timeout 10 airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg
     fi
 
     if [[ ! -f "./data_collected/network_dump/networks-01.csv" ]];then
@@ -214,6 +214,24 @@ select_wireless(){
 
 }
 
+
+IW_OUTPUT=$(iw list)
+check_band_available() {
+    BAND="$1"
+    BAND_SECTION=$(echo "$IW_OUTPUT" | awk -v band="Band $BAND:" '
+        $0 ~ band {flag=1; next}
+        /Band / {flag=0}
+        flag {print}
+    ')
+
+    # Verificar si la banda tiene frecuencias activas
+    if echo "$BAND_SECTION" | grep -q "MHz"; then
+        echo "✅"
+    else
+        echo "❌"
+    fi
+}
+
 TIMEOUT=""
 
 Deauther(){
@@ -248,6 +266,9 @@ Bruteforce(){
     TIMEOUT=$TIMEOUT_USR
 
     if [[ $TIMEOUT =~ ^[0-9]+$ ]] && [[ $TIMEOUT -ge 10 ]] && [[ $TIMEOUT -lt 200 ]];then
+        
+        #Cambiamos la interface al canal donde esta la red para poder hacer el ataque por el canal donde esta la red wifi.
+        iwconfig $MON_INTERFACE channel $CHANNEL_VAR
 
          if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
             # Estamos en un entorno gráfico
@@ -285,9 +306,48 @@ menu(){
             MODE=$(iwconfig "$SELECTED_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
             echo "You haved selected the interface: $SELECTED_INTERFACE  in Mode: $MODE"
 
+            BAND_NUMBERS=$(echo "$IW_OUTPUT" | grep -oP "Band \K\d+" | sort -u)
+
+            # Verificar el estado de cada banda
+            for number in $BAND_NUMBERS; do
+                case $number in
+                    1)
+                        echo "The interface $SELECTED_INTERFACE has: 2.4 GHz: $(check_band_available $number)"
+                        ;;
+                    2)
+                        echo "The interface $SELECTED_INTERFACE has: 5 GHz: $(check_band_available $number)"
+                        ;;
+                    4)
+                        echo "The interface $SELECTED_INTERFACE has: 6 GHz: $(check_band_available $number)"
+                        ;;
+                    *)
+                        echo "Banda $number: No reconocida"
+                        ;;
+                esac
+            done
+
         else
             MODE=$(iwconfig "$MON_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
             echo "You haved selected the interface: $MON_INTERFACE  in Mode: $MODE"
+            
+            BAND_NUMBERS=$(echo "$IW_OUTPUT" | grep -oP "Band \K\d+" | sort -u)
+            # Verificar el estado de cada banda
+            for number in $BAND_NUMBERS; do
+                case $number in
+                    1)
+                        echo "The interface $MON_INTERFACE has: 2.4 GHz: $(check_band_available $number)"
+                        ;;
+                    2)
+                        echo "The interface $MON_INTERFACE has: 5 GHz: $(check_band_available $number)"
+                        ;;
+                    4)
+                        echo "The interface $MON_INTERFACE has: 6 GHz: $(check_band_available $number)"
+                        ;;
+                    *)
+                        echo "Banda $number: No reconocida"
+                        ;;
+                esac
+            done
         fi
 
         if [[ -z "$BSSID_VAR" ]];then
