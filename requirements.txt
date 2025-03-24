@@ -1,3 +1,4 @@
 ssh
 apache2
 iw
+wmctrl
