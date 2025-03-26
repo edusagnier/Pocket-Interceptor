@@ -353,6 +353,19 @@ Craking_handshake(){
         exit 1
     fi
 
+    # Antes de crackerar hemos de verificar protocolos que se utilizan para adaptar los ataques de acceso: WEP (SUPER debil casi nada de uso);
+    #                                                                                                      WPA (Muy debil poco uso) 
+    #                                                                                                      WPA2/WPA mixto (Debil) (Se puede forzar al WPA)
+    #                                                                                                      WPA2 TKIP (Moderado)
+    #                                                                                                      WPA2 AES (CCMP) (Mas seguro)
+    #                                                                                                      WPA3 SAE (Muy Seguro)
+
+    #Primero si el ataque es hacia una red WPA2-PSK o WPA3-SAE
+
+    # Si el ataque de handshake no es valido hacer otros ataques. 
+
+
+
 }
 
 Bruteforce(){
@@ -494,7 +507,7 @@ menu(){
         echo ""
         echo "Network Configuration Menu"
         echo "- - - - - - - - - - - - - - - - - -"
-        echo "0. Exit Scipt"
+        echo "0. Exit Script"
         echo "1. Change Network Interface"
         echo "2. Put Interface In Monitor Mode (Needed for wireless atacks)"
         echo "3. Put Interface In Manager Mode "    
@@ -507,7 +520,7 @@ menu(){
         echo "6. Fake Capcha (Deauther + Ap Spofing + Phishing Login)"
         echo "7. DoS Attack (Stop the wireless conexions)"
         echo "8. Scan Network (Search Devices + Vulnerabilities)"
-        echo "9. "
+        echo "9. Something with Beef"
         echo "- - - - - - - - - - - - - - - - - -"
         echo ""
         echo ""
