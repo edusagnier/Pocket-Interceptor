@@ -1,6 +1,6 @@
 Reading packets, please wait...
 Opening wificapture-01.cap
-[0KRead 5633 packets.
+[0KRead 2929 packets.
 
    #  BSSID              ESSID                     Encryption
 
@@ -10,11 +10,11 @@ Choosing first network as target.
 
 Reading packets, please wait...
 Opening wificapture-01.cap
-[0KRead 5633 packets.
+[0KRead 2929 packets.
 
 1 potential targets
 
-[2J[2;32HAircrack-ng 1.7 [3;0H[0J[4;7H[00:00:00] 7/10303727 keys tested (298.20 k/s) [6;7HTime left: 9 hours, 35 minutes, 53 seconds                 0.00%
+[2J[2;32HAircrack-ng 1.7 [3;0H[0J[4;7H[00:00:00] 45/10303727 keys tested (992.34 k/s) [6;7HTime left: 2 hours, 53 minutes, 3 seconds                  0.00%
 [8;24HCurrent passphrase: A123456789a!               
 [11;7HMaster Key     : 65 A0 BB 2E FA B8 86 FB B9 93 66 4B E1 3E 18 E2 [48D[1B8D D5 54 4E 4E 9C 38 0B BD 33 F7 66 5F 76 82 5F [14;7HTransient Key  : 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
 [23C00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 

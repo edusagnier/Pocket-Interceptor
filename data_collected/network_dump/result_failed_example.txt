@@ -1,0 +1,19 @@
+Reading packets, please wait...
+Opening wificapture-01.cap
+[0KRead 3345 packets.
+
+   #  BSSID              ESSID                     Encryption
+
+   1  D4:60:E3:C0:D9:39  PI_WIFI                   Unknown
+
+Choosing first network as target.
+
+Reading packets, please wait...
+Opening wificapture-01.cap
+[0KRead 3345 packets.
+
+1 potential targets
+
+
+
+Quitting aircrack-ng...

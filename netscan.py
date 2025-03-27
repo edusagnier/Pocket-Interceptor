@@ -17,12 +17,12 @@ SERVICE_MAPPING = {
     'smtp': 'Postfix',
 }
 
+# Funcion que llama al script netdisc
 def netdisc():
-    """Ejecuta el script de descubrimiento de red"""
     try:
         print("\nRunning network discovery...")
         subprocess.run(["bash", "netdisc.sh"], check=True)
-        print("Network discovery completed. Results saved in network_devices.txt")
+        print("Network discovery completed. Results saved in scan.txt")
     except subprocess.CalledProcessError as e:
         print(f"Error during network discovery: {e}")
     except FileNotFoundError:
@@ -211,7 +211,7 @@ def menu():
         print("3. Run network discovery")
         
         
-        choice = input("\nEnter your choice (1/2/3/4): ").strip()
+        choice = input("\nEnter your choice (0/1/2/3): ").strip()
         
         if choice == "0":
             print("Exiting...")
