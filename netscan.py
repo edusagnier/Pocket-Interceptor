@@ -29,7 +29,6 @@ def netdisc():
         print("Error: netdisc.sh script not found")
 
 def get_clean_version(version):
-    """Extrae la versión base (9.7p1 -> 9.7)"""
     match = re.search(r'(\d+\.\d+)', version)
     return match.group(1) if match else version
 

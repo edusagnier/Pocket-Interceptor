@@ -1,4 +1,11 @@
 #!/bin/bash
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
 intro(){
     clear
     echo "________            ______      _____"                                
@@ -433,12 +440,17 @@ Bruteforce(){
 }
 
 beefattack() {
-    BEEF_HOOK="/usr/share/beef-xss/hook.js"
-    LANDING_PAGE="/var/www/html/index.html"
-    
-    echo "<html><head><script src='$BEEF_HOOK'></script></head><body></body></html>" > $LANDING_PAGE
+  
     
 }
+
+cleantables() {
+    iptables -F
+    iptables -t nat -F
+    iptables -X
+    iptables -Z
+}
+
 
 PASSWORD_cracked="A123456789a!"
 
