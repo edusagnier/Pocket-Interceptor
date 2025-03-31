@@ -2,6 +2,7 @@
 test_requirements(){
     
     clear
+    sudo apt update -y
     echo "Verifing if requirement software it's installed"
     REQUIRED_FILE="requirements.txt"
     # Verificar si el archivo existe
@@ -52,5 +53,11 @@ test_requirements(){
     return 0
 }
 
+USERID=`id -u`
 
-test_requirements
+if [ $USERID == 0 ];then
+    test_requirements
+else
+	echo "Not executed as root"
+fi
+exit 1
