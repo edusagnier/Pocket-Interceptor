@@ -13,8 +13,6 @@ ESSID_VAR="PI_WIFI_TEST"
 
 PASSWORD_cracked="A123456789a!"
 
-cd ./Pocket-Interceptor
-
 
 FILE_isc="isc-dhcp-server"
 DIRECTORY="./templates/"
@@ -26,9 +24,8 @@ activate_dhcp(){
     FILE_isc="isc-dhcp-server"
     DIRECTORY="./templates/"
     FILE_dhcp="dhcpd.conf"
-    sudo cp "${DIRECTORY}isc-dhcp-server_template" "${DIRECTORY}${FILE_isc}"
-
-    echo "INTERFACESv4=\"${SELECTED_INTERFACE}\"" >> "${DIRECTORY}${FILE_isc}"
+    
+    echo "INTERFACESv4=\"${SELECTED_INTERFACE}\"" > "${DIRECTORY}${FILE_isc}"
     echo 'INTERFACESv6=""' >> "${DIRECTORY}${FILE_isc}"
 
     sudo cp "${DIRECTORY}${FILE_isc}" /etc/default/

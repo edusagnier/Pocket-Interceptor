@@ -59,5 +59,5 @@ if [ $USERID == 0 ];then
     test_requirements
 else
 	echo "Not executed as root"
+    exit 1
 fi
-exit 1
