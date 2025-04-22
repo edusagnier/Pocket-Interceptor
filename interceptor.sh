@@ -183,6 +183,10 @@ manager_mode(){
             echo "[✗] Failed to return to management mode"
             exit 1
         fi
+
+        sudo service NetworkManager restart
+        sudo service wpa_supplicant restart
+
         MON_INTERFACE=""
         sleep 2
     else
@@ -190,6 +194,30 @@ manager_mode(){
         sleep 2
     fi
 }
+
+check_password(){
+
+    PASSWORD_TO_CHECK=$1
+
+    if [ -n "$PASSWORD_TO_CHECK" ];then
+        echo "No Password Send"
+        sleep 2
+        return 1
+    else
+        manager_mode
+        if sudo nmcli device wifi connect $BSSID_VAR password $PASSWORD_TO_CHECK; then
+            echo "Connection Succesfull"
+            sudo nmcli con down id $BSSID_VAR
+            sleep 2
+            return 0
+        else
+            echo "WIFI PASSWORD INCORRECT"
+            return 1
+        fi
+    fi
+}
+
+
 
 BSSID_VAR=""
 CHANNEL_VAR=""
@@ -283,6 +311,29 @@ select_wireless(){
 
         echo "$BSSID_VAR $ESSID_VAR"
 
+        EXIT_LOOP=false
+
+        while !$EXIT_LOOP ; do
+            read -p "Do you have the password of the network selected? Y/N" HAS_PASS
+            HAS_PASS = `echo $HAS_PASS | tr '[:upper:]' '[:lower:]'`
+
+            if [ $HAS_PASS == "y" ];then
+                read -p "Insert the password: " PASSWORD_CRACKED
+                if check_password $PASSWORD_CRACKED; then
+                    echo "Correct Password"
+                    EXIT_LOOP=true
+                    return 0
+                else
+                    echo "Password is incorrect"
+                fi 
+
+            elif [ $HAS_PASS == "n" ];then
+                EXIT_LOOP=true
+                return 0
+            else
+                echo "Invalid Character"
+            fi
+        done
     else
         echo "Invalid ID ."
     fi
@@ -560,7 +611,7 @@ beef_menu() {
 
 menu(){
    
-    if ./install.sh; then #true
+    if true; then #./install.sh
         select_interface
         clear
     else

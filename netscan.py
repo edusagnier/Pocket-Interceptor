@@ -7,168 +7,82 @@ import os
 from time import sleep
 from urllib.parse import quote
 
-# Registra una key gratuita en: https://nvd.nist.gov/developers/request-an-api-key
 NVD_API_KEY = os.getenv('NVD_API_KEY', '')  
 
-# Mapeo de nombres de servicios
-SERVICE_MAPPING = {
-    'ssh': 'OpenSSH',
-    'http': 'Apache HTTP Server',
-    'smtp': 'Postfix',
-}
-
-# Funcion que llama al script netdisc
 def netdisc():
-    try:
-        print("\nRunning network discovery...")
-        subprocess.run(["bash", "netdisc.sh"], check=True)
-        print("Network discovery completed. Results saved in scan.txt")
-    except subprocess.CalledProcessError as e:
-        print(f"Error during network discovery: {e}")
-    except FileNotFoundError:
-        print("Error: netdisc.sh script not found")
+    print("\nRunning network discovery...")
+    subprocess.run(["bash", "netdisc.sh"])
+    print("Network discovery completed. Results saved in scan.txt")
 
-def get_clean_version(version):
-    match = re.search(r'(\d+\.\d+)', version)
-    return match.group(1) if match else version
+def get_service_and_version(version_str):
+    if not version_str or version_str.lower() == 'unknown':
+        return None, None
+    
+    match = re.match(r'^([A-Za-z\-]+)[\s_]*([\d\.]+[a-zA-Z0-9\-\.]*)', version_str)
+    if match:
+        return match.group(1), match.group(2)
+    
+    return version_str, None
 
 def check_cve_nvd(service, version):
-    # Obtiene el nombre estandarizado del servicio
-    product = SERVICE_MAPPING.get(service.lower(), service)
-    version_clean = get_clean_version(version)
+    if not version:
+        return []
     
-    try:
-        # Configuración de la API NVD v2
-        url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-        query = f"{product} {version_clean}"
+    url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+    query = f"{service} {version}"
+    
+    params = {
+        'keywordSearch': query,
+        'resultsPerPage': 20
+    }
+    
+    headers = {}
+    if NVD_API_KEY:
+        headers['apiKey'] = NVD_API_KEY
+    
+    sleep(1)
+    
+    response = requests.get(url, params=params, headers=headers, timeout=15)
+    data = response.json()
+    
+    cves = []
+    for vuln in data.get('vulnerabilities', []):
+        cve = vuln.get('cve', {})
+        cve_id = cve.get('id', '')
         
-        params = {
-            'keywordSearch': query,
-            'resultsPerPage': 20
-        }
+        descriptions = [d['value'] for d in cve.get('descriptions', [])
+                     if d.get('lang') == 'en']
+        description = descriptions[0] if descriptions else 'No description'
         
-        headers = {}
-        if NVD_API_KEY:
-            headers['apiKey'] = NVD_API_KEY
-        
-        # Pequeño delay para evitar rate limiting
-        sleep(1)
-        
-        response = requests.get(url, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        
-        cves = []
-        for vuln in data.get('vulnerabilities', []):
-            cve = vuln.get('cve', {})
-            cve_id = cve.get('id', '')
-            
-            # Obtiene la descripción 
-            descriptions = [d['value'] for d in cve.get('descriptions', [])
-                         if d.get('lang') == 'en']
-            description = descriptions[0] if descriptions else 'No description'
-            
-            cves.append(f"{cve_id}: {description[:120]}...")
-        
-        return cves[:5]  # Limita a 5 resultados para mejor legibilidad
-        
-    except requests.exceptions.RequestException as e:
-        print(f"NVD API request failed: {str(e)}")
-        return []
-    except Exception as e:
-        print(f"Error processing NVD data: {str(e)}")
-        return []
+        cves.append(f"{cve_id}: {description[:120]}...")
+    
+    return cves[:5]
 
-def results(devices, output_file=None):
-    output = []
-    
+def results(devices):
     if not devices:
-        msg = "\nNo devices found."
-        print(msg)
-        output.append(msg)
+        print("\nNo devices found.")
     else:
-        msg = "\nDevices Found:\n"
-        print(msg)
-        output.append(msg)
-        
+        print("\nDevices Found:\n")
         for ip, ports in devices.items():
-            ip_msg = f" IP: {ip}"
-            print(ip_msg)
-            output.append(ip_msg)
-            
-            for port, service, version in ports:
-                port_msg = f"   -> {port}: {service} (Version: {version})"
-                print(port_msg)
-                output.append(port_msg)
+            print(f" IP: {ip}")
+            for port, service, version_info in ports:
+                service_name, version = get_service_and_version(version_info)
                 
-                cves = check_cve_nvd(service, version)
-                if cves:
-                    cve_msg = "      CVEs Found:"
-                    print(cve_msg)
-                    output.append(cve_msg)
-                    for cve in cves:
-                        cve_item = f"        - {cve}"
-                        print(cve_item)
-                        output.append(cve_item)
+                if not service_name:
+                    service_name = service
+                
+                print(f"   -> {port}: {service_name} {f'(Version: {version})' if version else ''}")
+                
+                if version:
+                    cves = check_cve_nvd(service_name, version)
+                    if cves:
+                        print("      CVEs Found:")
+                        for cve in cves:
+                            print(f"        - {cve}")
+                    else:
+                        print("      No known CVEs found.")
                 else:
-                    no_cve = "      No known CVEs found."
-                    print(no_cve)
-                    output.append(no_cve)
-    
-    if output_file:
-        with open(output_file, 'w') as f:
-            f.write('\n'.join(output))
-        print(f"\nResults saved to {output_file}")
-
-def netscan(network):
-    print(f"\nScanning network: {network} (this may take several minutes)...\n")
-    
-    try:
-        command = [
-            "nmap", "-sV", "-T4", "--min-rate", "500", 
-            "--max-retries", "2", "-Pn", "-p1-10000", network
-        ]
-        
-        result = subprocess.run(
-            command, 
-            capture_output=True, 
-            text=True,
-            timeout=3600  
-        )
-        
-        return parse_nmap_results(result.stdout)
-        
-    except subprocess.TimeoutExpired:
-        print("Scan timed out after 1 hour")
-        return {}
-    except Exception as e:
-        print(f"Scan failed: {str(e)}")
-        return {}
-
-def devscan(ip_address):
-    print(f"\nScanning device: {ip_address}\n")
-    
-    try:
-        command = [
-            "nmap", "-sV", "-T4", "-Pn", "-p-", 
-            "--version-intensity", "7", ip_address
-        ]
-        
-        result = subprocess.run(
-            command, 
-            capture_output=True, 
-            text=True,
-            timeout=1800  
-        )
-        
-        return parse_nmap_results(result.stdout)
-        
-    except subprocess.TimeoutExpired:
-        print("Scan timed out after 30 minutes")
-        return {ip_address: []}
-    except Exception as e:
-        print(f"Scan failed: {str(e)}")
-        return {ip_address: []}
+                    print("      Version not detected - cannot check CVEs")
 
 def parse_nmap_results(nmap_output):
     devices = {}
@@ -177,29 +91,48 @@ def parse_nmap_results(nmap_output):
     matches = re.finditer(pattern, nmap_output, re.DOTALL)
     
     for match in matches:
-        ip, port, service, full_version = match.groups()
-        version = extract_version(full_version)
+        ip, port, service, version_info = match.groups()
         
         if ip not in devices:
             devices[ip] = []
         
-        devices[ip].append((port, service, version))
+        devices[ip].append((port, service, version_info))
     
     return devices
 
-def extract_version(full_version):
-    version_patterns = [
-        r"(\d+\.\d+\.\d+[a-zA-Z0-9\-\.]*)",  # 1.2.3, 1.2.3a, 1.2.3-beta
-        r"(\d+\.\d+[a-zA-Z0-9\-\.]*)",       # 1.2, 1.2a, 1.2-beta
-        r"(\d+[a-zA-Z0-9\-\.]*)"             # 1, 1a, 1-beta
+def netscan(network):
+    print(f"\nScanning network: {network} (this may take several minutes)...\n")
+    
+    command = [
+        "nmap", "-sV", "-T4", "--min-rate", "500", 
+        "--max-retries", "2", "-Pn", "-p1-10000", network
     ]
     
-    for pattern in version_patterns:
-        match = re.search(pattern, full_version)
-        if match:
-            return match.group(0)
+    result = subprocess.run(
+        command, 
+        capture_output=True, 
+        text=True,
+        timeout=3600  
+    )
     
-    return "unknown"
+    return parse_nmap_results(result.stdout)
+
+def devscan(ip_address):
+    print(f"\nScanning device: {ip_address}\n")
+    
+    command = [
+        "nmap", "-sV", "-T4", "-Pn", "-p-", 
+        "--version-intensity", "7", ip_address
+    ]
+    
+    result = subprocess.run(
+        command, 
+        capture_output=True, 
+        text=True,
+        timeout=1800  
+    )
+    
+    return parse_nmap_results(result.stdout)
 
 def menu():
     while True:
@@ -208,7 +141,6 @@ def menu():
         print("1. Scan the entire network")
         print("2. Scan a single device")
         print("3. Run network discovery")
-        
         
         choice = input("\nEnter your choice (0/1/2/3): ").strip()
         
@@ -236,8 +168,7 @@ def menu():
             netdisc()
         
         else:
-            print("Invalid choice! Please enter a number between 1 and 4")
+            print("Invalid choice! Please enter a number between 0 and 3")
 
 if __name__ == "__main__":
-
     menu()
