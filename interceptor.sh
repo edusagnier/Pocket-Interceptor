@@ -6,9 +6,14 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# [+]
+# [✓]
+# [✗]
+
 intro(){
     clear
-    echo -e ""$BLUE"________            ______      _____"                                
+    echo -e "$BLUE"
+    echo "________            ______      _____"                                
     echo "___  __ \______________  /________  /_    "                           
     echo "__  /_/ /  __ \  ___/_  //_/  _ \  __/"                               
     echo "_  ____// /_/ / /__ _  ,<  /  __/ /_"                                 
@@ -170,6 +175,7 @@ monitor_mode(){
     
 }
 
+
 manager_mode(){
     
     if echo "$MON_INTERFACE" | grep -q "mon"; then
@@ -280,7 +286,7 @@ select_wireless(){
     # Leer el archivo línea por línea usando 'process substitution'
     while IFS=',' read -r BSSID FirstSeen LastSeen Channel Speed Privacy Cipher Auth Power Beacons IV LAN_IP ID_Length ESSID Key; do
     # Solo almacenar hay algun campo con informacion, si todo es vacio no almazenara.
-        if [[ -n "$BSSID" && -n "$Channel" && -n "$Privacy" && -n "$Cipher" && -n "$Auth" && -n "$Beacons" && -n "$ESSID" ]]; then
+        if [[ -n "$BSSID" && -n "$Channel" && -n "$Privacy" && -n "$Cipher" && -n "$Auth" && -n "$Beacons" && -n "$ESSID" && ("$ESSID" != " ") ]]; then
             # Guardar todos los datos en el array (para referencia interna)
             NETWORKS+=("$BSSID,$Channel,$Privacy,$Cipher,$Auth,$Beacons,$ESSID")
 
@@ -314,9 +320,9 @@ select_wireless(){
 
         echo "$BSSID_VAR $ESSID_VAR"
 
-        EXIT_LOOP=true
+        LOOP=true
 
-        while $EXIT_LOOP ; do
+        while $LOOP ; do
             read -p "Do you have the password of the network selected? Y/N " HAS_PASS
             HAS_PASS=`echo $HAS_PASS | tr '[:upper:]' '[:lower:]'`
 
@@ -324,14 +330,14 @@ select_wireless(){
                 read -p "Insert the password: " PASSWORD_CRACKED
                 if check_password "$PASSWORD_CRACKED"; then
                     echo "Correct Password"
-                    EXIT_LOOP=false
+                    LOOP=false
                 else
                     echo "Password is incorrect"
                     return 1
                 fi 
 
             elif [ $HAS_PASS == "n" ];then
-                EXIT_LOOP=false
+                LOOP=false
             else
                 echo "Invalid Character"
                 return 1
@@ -360,9 +366,9 @@ check_band_available() {
 
     # Verificar si la banda tiene frecuencias activas
     if echo "$BAND_SECTION" | grep -q "MHz"; then
-        echo "✅"
+        echo "[✓]"
     else
-        echo "❌"
+        echo "[✗]"
     fi
 }
 
@@ -605,7 +611,7 @@ beef_menu() {
             0) return 0;;
             1) beef_hosted ;;
             2) beef_local ;;
-            *) echo "❌ Not valid option."; exit_menu=true;;
+            *) echo "[✗] Not valid option."; exit_menu=true;;
         esac
     done
 
@@ -718,7 +724,7 @@ menu(){
             8) ./netscan.py ;;
             9) beef_menu ;;
             0) echo "👋 Goodbye..."; exit 0 ;;
-            *) echo "❌ Not valid option." ; sleep 2 ;;
+            *) echo "[✗] Not valid option." ; sleep 2 ;;
         esac
     done
 

