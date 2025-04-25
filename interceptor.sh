@@ -8,7 +8,7 @@ NC='\033[0m'
 
 intro(){
     clear
-    echo "________            ______      _____"                                
+    echo -e ""$BLUE"________            ______      _____"                                
     echo "___  __ \______________  /________  /_    "                           
     echo "__  /_/ /  __ \  ___/_  //_/  _ \  __/"                               
     echo "_  ____// /_/ / /__ _  ,<  /  __/ /_"                                 
@@ -26,6 +26,7 @@ intro(){
     echo "__/ /  _  / / / /_ /  __/  /   / /__ /  __/_  /_/ / /_ / /_/ /  /    "
     echo "/___/  /_/ /_/\__/ \___//_/    \___/ \___/_  .___/\__/ \____//_/     "
     echo "                                          /_/                        "
+    echo -e ""$NC""
     sleep 5
 }
 
@@ -135,7 +136,7 @@ open_terminal() {
         echo "No se pudo encontrar la ventana de la terminal."
     fi
 }
-#Hago unas variables globales para que poder decidir el tamaño 
+#Hago unas variables globales para que poder decidir la ubicacion 
 UP_LEFT="1"
 UP_RIGHT="2"
 DOWN_LEFT="3"
@@ -199,16 +200,18 @@ check_password(){
 
     PASSWORD_TO_CHECK=$1
 
-    if [ -n "$PASSWORD_TO_CHECK" ];then
+    if [ -z "$PASSWORD_TO_CHECK" ];then
         echo "No Password Send"
         sleep 2
         return 1
     else
         manager_mode
-        if sudo nmcli device wifi connect $BSSID_VAR password $PASSWORD_TO_CHECK; then
+        sleep 2
+        if sudo nmcli device wifi connect "$ESSID_VAR" password "$PASSWORD_TO_CHECK"; then
             echo "Connection Succesfull"
-            sudo nmcli con down id $BSSID_VAR
+            sudo nmcli con down id "$ESSID_VAR"
             sleep 2
+            monitor_mode
             return 0
         else
             echo "WIFI PASSWORD INCORRECT"
@@ -311,36 +314,37 @@ select_wireless(){
 
         echo "$BSSID_VAR $ESSID_VAR"
 
-        EXIT_LOOP=false
+        EXIT_LOOP=true
 
-        while !$EXIT_LOOP ; do
-            read -p "Do you have the password of the network selected? Y/N" HAS_PASS
-            HAS_PASS = `echo $HAS_PASS | tr '[:upper:]' '[:lower:]'`
+        while $EXIT_LOOP ; do
+            read -p "Do you have the password of the network selected? Y/N " HAS_PASS
+            HAS_PASS=`echo $HAS_PASS | tr '[:upper:]' '[:lower:]'`
 
             if [ $HAS_PASS == "y" ];then
                 read -p "Insert the password: " PASSWORD_CRACKED
-                if check_password $PASSWORD_CRACKED; then
+                if check_password "$PASSWORD_CRACKED"; then
                     echo "Correct Password"
-                    EXIT_LOOP=true
-                    return 0
+                    EXIT_LOOP=false
                 else
                     echo "Password is incorrect"
+                    return 1
                 fi 
 
             elif [ $HAS_PASS == "n" ];then
-                EXIT_LOOP=true
-                return 0
+                EXIT_LOOP=false
             else
                 echo "Invalid Character"
+                return 1
             fi
         done
     else
         echo "Invalid ID ."
+        return 1
     fi
 
     rm $FILE
-
     cd .. && cd .. # Se ha de cambiar a ruta no absoluta
+    return 0
 }
 
 
@@ -678,10 +682,10 @@ menu(){
         fi
 
         echo ""
-        echo "+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
+        echo -e "$RED""+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
         echo "|M|e|n|u| |I|n|t|e|r|c|e|p|t|o|r|"
         echo "+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
-        echo ""
+        echo -e "$NC"""
         echo "Network Configuration Menu"
         echo "- - - - - - - - - - - - - - - - - -"
         echo "0. Exit Script"
