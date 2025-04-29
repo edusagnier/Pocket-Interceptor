@@ -1,14 +1,17 @@
 #!/bin/bash
 
 RED='\033[0;31m'
-GREEN='\033[0;32m'
+BRED='\033[1;31m'
+GREEN='\033[1;32m'
 YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
+BLUE='\033[1;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[1;36m'
 NC='\033[0m'
 
 # [+]
-# [✓]
-# [✗]
+# ""$GREEN"[✓]"$NC"
+# "$RED"[✗]"$NC"
 
 intro(){
     clear
@@ -56,9 +59,9 @@ select_interface(){
     fi
 
     # Mostrar las interfaces disponibles
-    echo "Select a network interface:"
+    echo -e "$GREEN""Select a network interface:""$NC"
     for i in "${!INTERFACES[@]}"; do
-        echo "$((i+1)). ${INTERFACES[i]}"
+        echo -e "$CYAN""$((i+1))."$NC" ${INTERFACES[i]}"
     done
 
     # Leer la selección del usuario
@@ -80,9 +83,9 @@ select_interface(){
 
     
     if iwconfig "$SELECTED_INTERFACE" &>/dev/null; then
-        echo "[✓] It's a wireless interface $SELECTED_INTERFACE"
+        echo -e ""$GREEN"[✓]"$NC" It's a wireless interface $SELECTED_INTERFACE"
     else
-        echo "[✗] It isn't a wireless interface"
+        echo -e ""$BRED"[✗]"$NC" It isn't a wireless interface"
         exit 1
     fi
     
@@ -135,10 +138,10 @@ open_terminal() {
             "2") wmctrl -i -r "$WINDOW_ID" -e "0,$((WIDTH - CAL_WIDTH)),0,$CAL_WIDTH,$CAL_HEIGHT" ;; # Arriba Derecha
             "3") wmctrl -i -r "$WINDOW_ID" -e "0,0,$((HEIGHT - CAL_HEIGHT)),$CAL_WIDTH,$CAL_HEIGHT" ;; # Abajo Izquierda
             "4") wmctrl -i -r "$WINDOW_ID" -e "0,$((WIDTH - CAL_WIDTH)),$((HEIGHT - CAL_HEIGHT)),$CAL_WIDTH,$CAL_HEIGHT" ;; # Abajo Derecha
-            *) echo "ERROR: Posición inválida" ;;
+            *) echo -e ""$BRED"[✗]"$NC" ERROR: invalid position" ;;
         esac
     else
-        echo "No se pudo encontrar la ventana de la terminal."
+        echo -e ""$BRED"[✗]"$NC" No se pudo encontrar la ventana de la terminal."
     fi
 }
 #Hago unas variables globales para que poder decidir la ubicacion 
@@ -149,9 +152,8 @@ DOWN_RIGHT="4"
 
 monitor_mode(){
 
-    if echo "$SELECTED_INTERFACE" | grep -q "mon"; then
-        MON_INTERFACE=$SELECTED_INTERFACE
-        echo "It's already in monitor mode"
+    if echo "$MON_INTERFACE" | grep -q "mon"; then
+        echo -e ""$BRED"[✗]"$NC"It's already in monitor mode"
         SELECTED_INTERFACE="${SELECTED_INTERFACE//mon/}"
         sleep 2
 
@@ -164,9 +166,9 @@ monitor_mode(){
         # Verificar si la interfaz en modo monitor se creó
         MON_INTERFACE="${SELECTED_INTERFACE}mon"
         if iwconfig "$MON_INTERFACE" &>/dev/null; then
-            echo "[✓] Monitor mode activated in $MON_INTERFACE"
+            echo -e ""$GREEN"[✓]"$NC" Monitor mode activated in $MON_INTERFACE"
         else
-            echo "[✗] Error: Monitor mode could not be activated"
+            echo -e ""$BRED"[✗]"$NC" Error: Monitor mode could not be activated"
             exit 1
         fi
         sleep 2
@@ -185,9 +187,9 @@ manager_mode(){
         sudo airmon-ng stop "$MON_INTERFACE" &>/dev/null
 
         if iwconfig "$SELECTED_INTERFACE" &>/dev/null; then
-            echo "[✓] Manager mode activated in $SELECTED_INTERFACE"
+            echo -e ""$GREEN"[✓]"$NC" Manager mode activated in $SELECTED_INTERFACE"
         else
-            echo "[✗] Failed to return to management mode"
+            echo -e ""$BRED"[✗]"$NC" Failed to return to management mode"
             exit 1
         fi
 
@@ -197,7 +199,7 @@ manager_mode(){
         MON_INTERFACE=""
         sleep 2
     else
-        echo "The interface is already in monitor mode"
+        echo -e ""$BRED"[✗]"$NC"The interface is already in monitor mode"
         sleep 2
     fi
 }
@@ -212,15 +214,16 @@ check_password(){
         return 1
     else
         manager_mode
-        sleep 2
-        if sudo nmcli device wifi connect "$ESSID_VAR" password "$PASSWORD_TO_CHECK"; then
-            echo "Connection Succesfull"
-            sudo nmcli con down id "$ESSID_VAR"
-            sleep 2
+        sleep 3
+        if nmcli device wifi connect "$ESSID_VAR" password "$PASSWORD_TO_CHECK"; then
+            echo -e ""$GREEN"[✓]"$NC"Connection Succesfull"
+            nmcli con down id "$ESSID_VAR"
+            sleep 3
             monitor_mode
             return 0
         else
-            echo "WIFI PASSWORD INCORRECT"
+            echo -e ""$BRED"[✗]"$NC" WIFI PASSWORD INCORRECT"
+            PASSWORD_CRACKED=""
             return 1
         fi
     fi
@@ -240,7 +243,7 @@ PASSWORD_CRACKED=""
 select_wireless(){
     
     if [[ -z "$MON_INTERFACE" ]];then
-        echo "Not in monitor mode"
+        echo -e ""$BRED"[✗]"$NC" Not in monitor mode"
         sleep 2
         return 1    
     fi
@@ -282,6 +285,8 @@ select_wireless(){
 
     # Contador de filas (ID)
     COUNT=0
+    sleep 2
+    clear
 
     # Leer el archivo línea por línea usando 'process substitution'
     while IFS=',' read -r BSSID FirstSeen LastSeen Channel Speed Privacy Cipher Auth Power Beacons IV LAN_IP ID_Length ESSID Key; do
@@ -302,7 +307,7 @@ select_wireless(){
     done < <(tail -n +2 "$FILE")  # Leer desde la segunda línea
 
     # Solicitar entrada del usuario
-    read -p "Enter an ID number to view its information: " USER_ID
+    read -p "Enter an ID number to select the wifi: " USER_ID
 
     # Mostrar la información correspondiente al ID
     if [[ $USER_ID =~ ^[0-9]+$ ]] && [[ $USER_ID -ge 1 ]] && [[ $USER_ID -lt ${#NETWORKS[@]} ]]; then
@@ -319,32 +324,35 @@ select_wireless(){
         ESSID_VAR=$(echo "$ESSID" | awk '{$1=$1};1')
 
         echo "$BSSID_VAR $ESSID_VAR"
-
+        
+        sleep 2
+        clear
         LOOP=true
-
         while $LOOP ; do
-            read -p "Do you have the password of the network selected? Y/N " HAS_PASS
+            read -p "Do you have the password of the network selected $ESSID_VAR? Y/N " HAS_PASS
             HAS_PASS=`echo $HAS_PASS | tr '[:upper:]' '[:lower:]'`
 
             if [ $HAS_PASS == "y" ];then
                 read -p "Insert the password: " PASSWORD_CRACKED
                 if check_password "$PASSWORD_CRACKED"; then
-                    echo "Correct Password"
+                    echo -e ""$GREEN"[✓]"$NC"Correct Password"
                     LOOP=false
                 else
-                    echo "Password is incorrect"
+                    echo -e ""$BRED"[✗]"$NC" Password is incorrect try again"
                     return 1
                 fi 
 
             elif [ $HAS_PASS == "n" ];then
                 LOOP=false
             else
-                echo "Invalid Character"
+                echo -e ""$BRED"[✗]"$NC"Invalid Character"
                 return 1
             fi
         done
     else
-        echo "Invalid ID ."
+       echo -e ""$BRED"[✗]"$NC" Invalid ID ."
+        rm $FILE
+        cd .. && cd ..
         return 1
     fi
 
@@ -366,14 +374,20 @@ check_band_available() {
 
     # Verificar si la banda tiene frecuencias activas
     if echo "$BAND_SECTION" | grep -q "MHz"; then
-        echo "[✓]"
+        echo -e ""$GREEN"[✓]"$NC""
     else
-        echo "[✗]"
+        echo -e ""$BRED"[✗]"$NC""
     fi
 }
 
 
 Deauther(){
+
+    if [ -z "$BSSID_VAR" ];then 
+        echo -e ""$BRED"[✗]"$NC" No wifi selected"
+        sleep 2
+        return 1
+    fi
 
     TIMEOUT="$1"
     iwconfig $MON_INTERFACE channel $CHANNEL_VAR
@@ -416,7 +430,7 @@ Craking_handshake(){
         echo "$RESULTS"
         
         RESULTS=$(grep "KEY FOUND!" "./data_collected/network_dump/result_$ESSID_VAR.txt" | sed -E 's/.*\[ (.+) \].*/\1/' | head -n 1)
-
+        echo "$RESULTS"
 
         rm ./wificapture-01.*
         cd .. && cd ..
@@ -438,8 +452,6 @@ Craking_handshake(){
     #Primero si el ataque es hacia una red WPA2-PSK o WPA3-SAE
 
     # Si el ataque de handshake no es valido hacer otros ataques. 
-
-
 
 }
 
@@ -598,7 +610,7 @@ beef_local() {
 }
 
 beef_menu() {
-
+    clear
     exit_menu=false
     while ! $exit_menu; do
         echo "Beef Menu:"
@@ -611,7 +623,7 @@ beef_menu() {
             0) return 0;;
             1) beef_hosted ;;
             2) beef_local ;;
-            *) echo "[✗] Not valid option."; exit_menu=true;;
+            *) echo -e ""$BRED"[✗]"$NC" Not valid option."; exit_menu=true;;
         esac
     done
 
@@ -620,7 +632,7 @@ beef_menu() {
 
 
 menu(){
-   
+
     if true; then #./install.sh
         select_interface
         clear
@@ -631,11 +643,11 @@ menu(){
     BOOL_SELECTION=true
 
     while $BOOL_SELECTION; do
-        
+        clear    
         if [[ -z "$MON_INTERFACE" ]];then
             
             MODE=$(iwconfig "$SELECTED_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
-            echo "You haved selected the interface: $SELECTED_INTERFACE  in Mode: $MODE"
+            echo -e "You haved selected the interface: "$GREEN"$SELECTED_INTERFACE"$NC"  in Mode: "$PURPLE"$MODE""$NC"
 
             BAND_NUMBERS=$(echo "$IW_OUTPUT" | grep -oP "Band \K\d+" | sort -u)
 
@@ -643,73 +655,73 @@ menu(){
             for number in $BAND_NUMBERS; do
                 case $number in
                     1)
-                        echo "The interface $SELECTED_INTERFACE has: 2.4 GHz: $(check_band_available $number)"
+                        echo -e "The interface "$GREEN"$SELECTED_INTERFACE"$NC" has: "$PURPLE"2.4 GHz:"$NC" $(check_band_available $number)"
                         ;;
                     2)
-                        echo "The interface $SELECTED_INTERFACE has: 5 GHz: $(check_band_available $number)"
+                        echo -e "The interface "$GREEN"$SELECTED_INTERFACE"$NC" has: "$PURPLE"5 GHz:"$NC" $(check_band_available $number)"
                         ;;
                     4)
-                        echo "The interface $SELECTED_INTERFACE has: 6 GHz: $(check_band_available $number)"
+                        echo -e "The interface "$GREEN"$SELECTED_INTERFACE"$NC" has: "$PURPLE"6 GHz:"$NC" $(check_band_available $number)"
                         ;;
                     *)
-                        echo "Banda $number: No reconocida"
+                        echo -e "Band $number: "$RED" Not recognized "$NC""
                         ;;
                 esac
             done
 
         else
             MODE=$(iwconfig "$MON_INTERFACE" 2>/dev/null | grep -o 'Mode:[^ ]*' | cut -d: -f2)
-            echo "You haved selected the interface: $MON_INTERFACE  in Mode: $MODE"
+            echo -e "You haved selected the interface: "$GREEN"$MON_INTERFACE"$NC"  in Mode: "$PURPLE"$MODE"$NC""
             
             BAND_NUMBERS=$(echo "$IW_OUTPUT" | grep -oP "Band \K\d+" | sort -u)
             # Verificar el estado de cada banda
             for number in $BAND_NUMBERS; do
                 case $number in
                     1)
-                        echo "The interface $MON_INTERFACE has: 2.4 GHz: $(check_band_available $number)"
+                        echo -e "The interface "$GREEN"$MON_INTERFACE"$NC" has: "$PURPLE"2.4 GHz:"$NC" $(check_band_available $number)"
                         ;;
                     2)
-                        echo "The interface $MON_INTERFACE has: 5 GHz: $(check_band_available $number)"
+                        echo -e "The interface "$GREEN"$MON_INTERFACE"$NC" has: "$PURPLE"5 GHz:"$NC" $(check_band_available $number)"
                         ;;
                     4)
-                        echo "The interface $MON_INTERFACE has: 6 GHz: $(check_band_available $number)"
+                        echo -e "The interface "$GREEN"$MON_INTERFACE"$NC" has: "$PURPLE"6 GHz:"$NC" $(check_band_available $number)"
                         ;;
                     *)
-                        echo "Banda $number: No reconocida"
+                        echo -e "Band $number: "$RED" Not recognized "$NC""
                         ;;
                 esac
             done
         fi
 
         if [[ -z "$BSSID_VAR" ]];then
-            echo "You don't have any Wireless network selected"
+            echo -e "$RED""You don't have any Wireless network selected""$NC"
         else
-            echo "You have the wireless network $ESSID_VAR selected with the BSSID: $BSSID_VAR with the privacy type: $PRIVACY_VAR"
+            echo -e "You have the wireless network "$CYAN"$ESSID_VAR"$NC" selected with the BSSID: "$CYAN"$BSSID_VAR"$NC" with the privacy type: "$CYAN"$PRIVACY_VAR"$NC""
         fi
 
         echo ""
-        echo -e "$RED""+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
+        echo -e "$BRED""+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
         echo "|M|e|n|u| |I|n|t|e|r|c|e|p|t|o|r|"
         echo "+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
         echo -e "$NC"""
-        echo "Network Configuration Menu"
-        echo "- - - - - - - - - - - - - - - - - -"
-        echo "0. Exit Script"
-        echo "1. Change Network Interface"
-        echo "2. Put Interface In Monitor Mode (Needed for wireless atacks)"
-        echo "3. Put Interface In Manager Mode "    
-        echo "4. Select wireless network "
-        echo "- - - - - - - - - - - - - - - - - -"
+        echo -e "$BLUE""Network Configuration Menu"
+        echo -e "- - - - - - - - - - - - - - - - - -""$NC"
+        echo -e "$CYAN""0."$NC" Exit Script"
+        echo -e "$CYAN""1."$NC" Change Network Interface"
+        echo -e "$CYAN""2."$NC" Put Interface In Monitor Mode (Needed for wireless atacks)"
+        echo -e "$CYAN""3."$NC" Put Interface In Manager Mode "    
+        echo -e "$CYAN""4."$NC" Select wireless network "
+        echo -e "$BLUE""- - - - - - - - - - - - - - - - - -"
         echo ""
         echo "Atacks Menu"
-        echo "- - - - - - - - - - - - - - - - - -"
-        echo "5. Deauther + Bruteforce (Get inside the Wireless network) "
-        echo "6. Fake Captive Portal (Deauther + Ap Spofing + Phishing Login)"
-        echo "7. DoS Attack (Stop the wireless conexions)"
-        echo "8. Scan Network (Search Devices + Vulnerabilities)"
-        echo "9. BEeF redirect attack"
-        echo "- - - - - - - - - - - - - - - - - -"
-        echo ""
+        echo -e "- - - - - - - - - - - - - - - - - -""$NC"
+        echo -e "$CYAN""5."$NC" Deauther + Bruteforce (Get inside the Wireless network) "
+        echo -e "$CYAN""6."$NC" Fake Captive Portal (Deauther + Ap Spofing + Phishing Login)"
+        echo -e "$CYAN""7."$NC" DoS Attack (Stop the wireless conexions)"
+        echo -e "$CYAN""8."$NC" Scan Network (Search Devices + Vulnerabilities)"
+        echo -e "$CYAN""9."$NC" BEeF redirect attack"
+        echo -e "$BLUE""- - - - - - - - - - - - - - - - - -"
+        echo -e "$NC"""
         echo ""
         read -p "Select the option you want: " SELECTION
 
@@ -723,8 +735,8 @@ menu(){
             7) Deauther "0" ;;
             8) ./netscan.py ;;
             9) beef_menu ;;
-            0) echo "👋 Goodbye..."; exit 0 ;;
-            *) echo "[✗] Not valid option." ; sleep 2 ;;
+            0) echo -e "👋 "$BLUE"Goodbye...""$NC"; exit 0 ;;
+            *) echo -e ""$BRED"[✗]"$NC" Not valid option." ; sleep 2 ;;
         esac
     done
 

