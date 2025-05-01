@@ -7,17 +7,16 @@ import os
 from time import sleep
 from urllib.parse import quote
 
+# Consigue una key gratuita de la api
 NVD_API_KEY = os.getenv('NVD_API_KEY', '')  
 
+# Funcion que ejecuta el netdisc.sh
 def netdisc():
     print("\nRunning network discovery...")
     subprocess.run(["bash", "netdisc.sh"])
-    print("Network discovery completed. Results saved in scan.txt")
+    print("Network discovery completed.")
 
 def get_service_and_version(version_str):
-    if not version_str or version_str.lower() == 'unknown':
-        return None, None
-    
     match = re.match(r'^([A-Za-z\-]+)[\s_]*([\d\.]+[a-zA-Z0-9\-\.]*)', version_str)
     if match:
         return match.group(1), match.group(2)
@@ -109,7 +108,8 @@ def netscan(network):
     ]
     
     result = subprocess.run(
-        command, 
+        command,     print(f"\nScanning network: {network} (this may take several minutes)...\n")
+
         capture_output=True, 
         text=True,
         timeout=3600  
@@ -134,6 +134,7 @@ def devscan(ip_address):
     
     return parse_nmap_results(result.stdout)
 
+# Submenu
 def menu():
     while True:
         print("\nNetwork Scanner Menu:")

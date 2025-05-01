@@ -699,8 +699,8 @@ menu(){
             echo -e "You have the wireless network "$CYAN"$ESSID_VAR"$NC" selected with the BSSID: "$CYAN"$BSSID_VAR"$NC" with the privacy type: "$CYAN"$PRIVACY_VAR"$NC""
         fi
 
-        echo ""
-        echo -e "$BRED""+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
+        echo -e "$BRED"
+        echo "+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
         echo "|M|e|n|u| |I|n|t|e|r|c|e|p|t|o|r|"
         echo "+-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+"
         echo -e "$NC"""
@@ -748,6 +748,6 @@ if [ $USERID == 0 ];then
     intro
     menu
 else
-	echo "Not executed as root"
+	echo -e ""$BRED"[✗]"$NC" Not executed as root"
+    exit 1
 fi
-exit 1

@@ -5,3 +5,5 @@ wmctrl
 aircrack-ng
 beef-xss
 isc-dhcp-server
+dnsmasq
+php

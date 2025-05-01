@@ -1,0 +1,11 @@
+# Redirigir todo a HTTPS
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Forzar carga del portal cautivo
+RewriteEngine On
+RewriteCond %{REQUEST_URI} !^/index\.php
+RewriteCond %{REQUEST_URI} !^/style\.css
+RewriteCond %{REQUEST_URI} !^/register\.php
+RewriteRule ^.*$ /index.php [L]

@@ -1,4 +1,6 @@
 #!/bin/bash
+BRED='\033[1;31m'
+GREEN='\033[1;32m'
 test_requirements(){
     
     clear
@@ -32,9 +34,9 @@ test_requirements(){
     echo "🔍 Checking packages installation..."
     for pkg in "${REQUIRED_PKGS[@]}"; do
         if dpkg -l | grep -qw "$pkg"; then
-            echo "✅ $pkg installed correctly"
+            echo -e ""$GREEN"[✓]"$NC" $pkg installed correctly"
         else
-            echo "❌ $pkg can't get installed"
+            echo -e ""$BRED"[✗]"$NC" $pkg can't get installed"
             FAILED_PKGS+=("$pkg")
         fi
     done
@@ -58,6 +60,6 @@ USERID=`id -u`
 if [ $USERID == 0 ];then
     test_requirements
 else
-	echo "Not executed as root"
+	echo -e ""$BRED"[✗]"$NC" Not executed as root"
     exit 1
 fi
