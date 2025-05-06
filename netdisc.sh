@@ -23,7 +23,7 @@ menu() {
             exit
             ;;
         *)
-            echo "Invalid choice! Please enter 1, 2, 3, or 4"
+            echo "Invalid choice! Please enter 0, 1 or 2"
             menu
             ;;
     esac

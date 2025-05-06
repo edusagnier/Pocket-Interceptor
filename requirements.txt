@@ -1,9 +1,9 @@
-ssh
 apache2
 iw
 wmctrl
 aircrack-ng
 beef-xss
+hostapd
 isc-dhcp-server
 dnsmasq
 php

