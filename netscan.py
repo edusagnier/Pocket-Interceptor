@@ -92,16 +92,13 @@ def check_cve_nvd(service, version):
         return []
 
 
-# Función para mostrar los resultados del escaneo
+# Define una función para mostrar los resultados del escaneo de dispositivos, incluyendo las CVEs encontradas
 def results(devices, output_file=None):
+    # Inicializa una lista para almacenar las líneas del output
     output = []
 
-    if not devices:
-        msg = "\nNo devices found."
-        print(msg)
-        output.append(msg)
-    # Si se encontraron dispositivos
-    else:
+    # Si se encontraron dispositivos, itera sobre ellos
+    if devices:
         msg = "\nDevices Found:\n"
         print(msg)
         output.append(msg)
@@ -110,13 +107,17 @@ def results(devices, output_file=None):
             ip_msg = f" IP: {ip}"
             print(ip_msg)
             output.append(ip_msg)
-            # Itera sobre los puertos abiertos y los servicios encontrados en cada dispositivo
-            for port, service, version in ports:
-                port_msg = f"  -> {port}: {service} (Version: {version})"
+
+            # Itera sobre cada puerto, servicio y versión encontrados
+            for port, service_raw, version in ports:
+                # Obtiene el nombre del servicio mapeado
+                service_mapped = SERVICE_MAPPING.get(service_raw.lower(), service_raw)
+                port_msg = f"  -> {port}: {service_raw} ({service_mapped}, Version: {version})"
                 print(port_msg)
                 output.append(port_msg)
-                # Busca y muestra las CVEs para el servicio y la versión actuales
-                cves = check_cve_nvd(service, version)
+
+                # Busca CVEs para el servicio y la versión
+                cves = check_cve_nvd(service_raw, version)
                 if cves:
                     cve_msg = "    CVEs Found:"
                     print(cve_msg)
@@ -130,7 +131,7 @@ def results(devices, output_file=None):
                     print(no_cve)
                     output.append(no_cve)
 
-
+ 
 # Función para realizar un escaneo de red utilizando la herramienta Nmap.
 def netscan(network):
     print(f"\nScanning network: {network} (this may take several minutes)...\n")
