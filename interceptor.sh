@@ -192,8 +192,8 @@ manager_mode(){
             exit 1
         fi
 
-        sudo service NetworkManager restart 
-        sudo service wpa_supplicant restart
+        #sudo service NetworkManager restart 
+        #sudo service wpa_supplicant restart
 
         MON_INTERFACE=""
         sleep 2
@@ -621,10 +621,10 @@ menu(){
             3) manager_mode ;;
             4) select_wireless ;;
             5) Bruteforce ;;
-            6) echo ""; hostname -I ;;
+            6) ./hostapd_testing.sh ;;
             7) Deauther "0" ;;
             8) ./netscan.py ;;
-            9) beef_menu ;;
+            9) ./hostapd_testing.sh 1 ;;
             10) echo "";;
             0) echo -e "👋 "$BLUE"Goodbye...""$NC"; exit 0 ;;
             *) echo -e ""$BRED"[✗]"$NC" Not valid option." ; sleep 2 ;;
