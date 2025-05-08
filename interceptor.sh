@@ -1336,7 +1336,7 @@ cleanup() {
 
     turn_off_services
 
-    sudo iptables -L -t nat
+    sudo iptables -F -t nat
 
     sudo rm "${DIRECTORY}"*
     
@@ -1356,7 +1356,7 @@ set_interface_AP_MODE(){
 
     #En caso que el usuario tenga ya una ip en la interfaz wifi
     sudo ip addr flush dev $SELECTED_INTERFACE
-
+    #sudo macchanger -m $BSSID_VAR $SELECTED_INTERFACE
     #Insertamos una ip a la interficie
     sudo ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE
     check_success "ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE"
@@ -1369,6 +1369,10 @@ false_ap(){
         sleep 3
         return 1
     fi
+    
+    # sudo systemctl stop NetworkManager && sudo systemctl stop wpa_supplicant && sudo airmon-ng check kill
+    sudo systemctl stop NetworkManager 
+    sudo systemctl stop wpa_supplicant
 
 
     VARIATION="$1"
@@ -1524,11 +1528,11 @@ menu(){
             3) manager_mode ;;
             4) select_wireless ;;
             5) Bruteforce ;;
-            6) false_ap 3;;
+            6) ./hostapd_testing.sh 3;;
             7) Deauther "0" ;;
             8) ./netscan.py ;;
-            9) false_ap 1 ;;
-            10) false_ap 2 ;;
+            9) ./hostapd_testing.sh 1 ;;
+            10) ./hostapd_testing.sh 2 ;;
             0) echo -e "👋 "$BLUE"Goodbye...""$NC"; exit 0 ;;
             *) echo -e ""$BRED"[✗]"$NC" Not valid option." ; sleep 2 ;;
         esac

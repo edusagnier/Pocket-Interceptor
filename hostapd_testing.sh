@@ -1,7 +1,14 @@
 #!/bin/bash
 
+RED='\033[0;31m'
+BRED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[1;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[1;36m'
+NC='\033[0m'
 
-#sudo systemctl stop NetworkManager && sudo systemctl stop wpa_supplicant && sudo airmon-ng check kill
 
 MON_INTERFACE=""
 SELECTED_INTERFACE="wlan0"
@@ -858,7 +865,10 @@ set_interface_AP_MODE(){
 
 }
 false_ap(){
-
+    
+    # sudo systemctl stop NetworkManager && sudo systemctl stop wpa_supplicant && sudo airmon-ng check kill
+    sudo systemctl stop NetworkManager 
+    sudo systemctl stop wpa_supplicant
     #VARIATION="$1"
 
     # while DOING = true ;do Deauther 0 ;done # Buscar una manera para poder crear hacer el deauther hasta que quiera que pare.
