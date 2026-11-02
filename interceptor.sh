@@ -3,6 +3,7 @@
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIRECTORY/lib/session.sh" || exit 1
 source "$SCRIPT_DIRECTORY/lib/scanner.sh" || exit 1
+source "$SCRIPT_DIRECTORY/lib/live_output.sh" || exit 1
 
 RED='\033[0;31m'
 BRED='\033[1;31m'
@@ -415,51 +416,19 @@ Deauther(){
 }
 
 Craking_handshake(){
+    local status
     clear
-    cd data_collected/network_dump
-
-    FILE="wificapture-01.cap"
-
-    if [[ -z $FILE ]];then
-        echo "ERROR file not found"
-        return 1
+    show_handshake_progress \
+        "$SCRIPT_DIRECTORY/data_collected/network_dump/wificapture-01.cap" \
+        "/usr/share/wordlists/rockyou.txt" \
+        "$SCRIPT_DIRECTORY/data_collected/network_dump"
+    status=$?
+    if [[ -t 0 ]]; then
+        read -r -p 'Pulsa Enter para volver al menu... ' _ || true
     fi
-        
-    WORDLIST="/usr/share/wordlists/rockyou.txt"
-
-
-    if aircrack-ng $FILE -w $WORDLIST > result_"$ESSID_VAR".txt ;then
-
-        
-        echo "We cracked the password. Saved on ./data_collected/network_dump/result_$ESSID_VAR.txt"
-        RESULTS=$(grep "KEY FOUND!" result_"$ESSID_VAR".txt | tr -d '[:space:]')
-        echo "$RESULTS"
-        
-        RESULTS=$(grep "KEY FOUND!" "./data_collected/network_dump/result_$ESSID_VAR.txt" | sed -E 's/.*\[ (.+) \].*/\1/' | head -n 1)
-        echo "$RESULTS"
-
-        rm ./wificapture-01.*
-        cd .. && cd ..
-        sleep 5
-        return 0
-    else 
-        echo "NO FOUND"
-        rm ./wificapture-01.*
-        exit 1
-    fi
-
-    # Antes de crackerar hemos de verificar protocolos que se utilizan para adaptar los ataques de acceso: WEP (SUPER debil casi nada de uso);
-    #                                                                                                      WPA (Muy debil poco uso) 
-    #                                                                                                      WPA2/WPA mixto (Debil) (Se puede forzar al WPA)
-    #                                                                                                      WPA2 TKIP (Moderado)
-    #                                                                                                      WPA2 AES (CCMP) (Mas seguro)
-    #                                                                                                      WPA3 SAE (Muy Seguro)
-
-    #Primero si el ataque es hacia una red WPA2-PSK o WPA3-SAE
-
-    # Si el ataque de handshake no es valido hacer otros ataques. 
-
+    return "$status"
 }
+
 
 Bruteforce(){
     
