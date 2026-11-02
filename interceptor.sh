@@ -4,6 +4,7 @@ SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIRECTORY/lib/session.sh" || exit 1
 source "$SCRIPT_DIRECTORY/lib/scanner.sh" || exit 1
 source "$SCRIPT_DIRECTORY/lib/live_output.sh" || exit 1
+source "$SCRIPT_DIRECTORY/lib/wireless_scan.sh" || exit 1
 
 RED='\033[0;31m'
 BRED='\033[1;31m'
@@ -254,33 +255,8 @@ select_wireless(){
         return 1    
     fi
         
-    TIMEOUT_SCAN=10
-    # Si estamos en un entorno gráfico
-    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        #Verifica si se puede leer la resolución
-        if get_screen_resolution ; then
-            #Abre una terminal en una determinada posición 
-            open_terminal "timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg'" "$UP_LEFT"
-            #Dejamos que se ejecute en segundo plano el escaneo antes de mirar la informacion
-            sleep $TIMEOUT_SCAN
-        else
-            # Si no tenemos resulción ejecutaremos una terminal sin determinar la posición ni tamaño.
-            x-terminal-emulator -e "timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv $MON_INTERFACE --ignore-negative-one --band abg"
-        fi 
-    else
-        # No hay entorno gráfico, ejecutarlo en la terminal actual
-        sudo timeout $TIMEOUT_SCAN airodump-ng -w data_collected/network_dump/networks --output-format csv "$MON_INTERFACE" --ignore-negative-one --band abg # VERIFICAR PORQUE AHORA NO HACE OUTPUT
-    fi
-    
-    
-    if [[ ! -f "./data_collected/network_dump/networks-01.csv" ]];then
-        echo "File csv with network not found"
-        exit 1
-    fi
-
-    cd  ./data_collected/network_dump/
-    FILE="networks-01.csv"
-    
+    scan_wireless_networks "$MON_INTERFACE" "$SCRIPT_DIRECTORY/data_collected/network_dump" || return $?
+    local FILE="$WIRELESS_SCAN_FILE"
 
     CLIENTS=$(sed -n '/Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs/,$p' "$FILE") # Se debera mirar que clientes estan reconocibles por la cada wifi
     # Eliminar la información del archivo
@@ -357,13 +333,11 @@ select_wireless(){
         done
     else
        echo -e ""$BRED"[✗]"$NC" Invalid ID ."
-        rm $FILE
-        cd .. && cd ..
+        rm -- "$FILE"
         return 1
     fi
 
-    rm $FILE
-    cd .. && cd .. # Se ha de cambiar a ruta no absoluta
+    rm -- "$FILE"
     WIFI_SELECTED="true"
     return 0
 }
