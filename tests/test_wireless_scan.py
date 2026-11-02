@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @unittest.skipUnless(os.environ.get("POCKET_TEST_BASH"), "Set POCKET_TEST_BASH for Bash tests")
 class WirelessDiscoveryTests(unittest.TestCase):
     def run_scan(self, status=124, create_csv=True, missing_tool="", interface="wlan0mon",
-                 interface_type="monitor", missing_interface=False, link_failure=False):
+                 interface_type="monitor", missing_interface=False):
         executable = os.environ["POCKET_TEST_BASH"]
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output with spaces"
@@ -24,7 +24,6 @@ class WirelessDiscoveryTests(unittest.TestCase):
                        POCKET_TERMINAL_MODE="inline",
                        FAKE_STATUS=str(status), FAKE_CSV="yes" if create_csv else "no",
                        FAKE_TYPE=interface_type, FAKE_IW_STATUS=str(int(missing_interface)),
-                       FAKE_IP_STATUS=str(int(link_failure)),
                        FAKE_MISSING=missing_tool, FAKE_INTERFACE=interface)
             env["PATH"] = str(Path(executable).parent) + os.pathsep + env.get("PATH", "")
             body = r'''
@@ -36,7 +35,11 @@ command() {
     builtin command "$@"
 }
 iw() { printf 'Interface synthetic\n\ttype %s\n' "$FAKE_TYPE"; return "$FAKE_IW_STATUS"; }
-ip() { return "$FAKE_IP_STATUS"; }
+ip() {
+    printf 'UNEXPECTED_IP_CALL=%s\n' "$*" >> "$WIRELESS_OUTPUT/link_operations"
+    printf 'RTNETLINK answers: Protocol error\n' >&2
+    return 1
+}
 timeout() {
     local prefix="" arg expect_prefix=no
     for arg in "$@"; do
@@ -51,6 +54,7 @@ x-terminal-emulator() { printf GUI_MUST_NOT_RUN; return 91; }
 wmctrl() { printf GUI_MUST_NOT_RUN; return 91; }
 scan_wireless_networks "$FAKE_INTERFACE" "$WIRELESS_OUTPUT"
 status=$?
+if [[ -f "$WIRELESS_OUTPUT/link_operations" ]]; then cat "$WIRELESS_OUTPUT/link_operations"; fi
 printf 'RESULT=%s\n' "$WIRELESS_SCAN_FILE"
 if [[ -n "$WIRELESS_SCAN_FILE" ]]; then cat "$WIRELESS_SCAN_FILE"; fi
 exit "$status"
@@ -86,11 +90,18 @@ exit "$status"
         self.assertIn("no está disponible", result.stderr)
         self.assertNotIn("ARG=", result.stdout)
 
-    def test_driver_activation_failure_stops_before_scan(self):
-        result = self.run_scan(link_failure=True)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("rfkill", result.stderr)
-        self.assertNotIn("ARG=", result.stdout)
+    def test_monitor_is_scanned_without_querying_or_changing_link(self):
+        result = self.run_scan()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("UNEXPECTED_IP_CALL", result.stdout)
+        self.assertNotIn("RTNETLINK", result.stderr)
+        self.assertIn("ARG=airodump-ng", result.stdout)
+
+    def test_scan_does_not_require_ip(self):
+        result = self.run_scan(missing_tool="ip")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("UNEXPECTED_IP_CALL", result.stdout)
+        self.assertIn("ARG=airodump-ng", result.stdout)
 
     def test_tool_failure_is_not_reported_as_a_success(self):
         result = self.run_scan(status=2)
@@ -110,7 +121,7 @@ exit "$status"
         self.assertIn("cancelado", result.stderr)
 
     def test_missing_dependencies_are_reported(self):
-        for tool in ("airodump-ng", "timeout", "iw", "ip"):
+        for tool in ("airodump-ng", "timeout", "iw"):
             with self.subTest(tool=tool):
                 result = self.run_scan(missing_tool=tool)
                 self.assertEqual(result.returncode, 127)

@@ -1,0 +1,91 @@
+SIMULATED TERMINAL RUN: real menu code, synthetic interface/network/window; no radio traffic.
+
+
+________            ______      _____
+___  __ \______________  /________  /_    
+__  /_/ /  __ \  ___/_  //_/  _ \  __/
+_  ____// /_/ / /__ _  ,<  /  __/ /_
+/_/     \____/\___/ /_/|_| \___/\__/
+
+
+
+________                             
+_/_____/                              
+
+
+________      _____                               _____              
+____  _/________  /_________________________________  /______________
+ __  / __  __ \  __/  _ \_  ___/  ___/  _ \__  __ \  __/  __ \_  ___/
+__/ /  _  / / / /_ /  __/  /   / /__ /  __/_  /_/ / /_ / /_/ /  /    
+/___/  /_/ /_/\__/ \___//_/    \___/ \___/_  .___/\__/ \____//_/     
+                                          /_/                        
+
+Select a network interface:
+1. wlan0mon
+[✓] It's a wireless interface wlan0mon
+You haved selected the interface: wlan0mon  in Mode: Monitor
+The interface wlan0mon has: 2.4 GHz: [✓]
+You don't have any Wireless network selected
+
++-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+
+|M|e|n|u| |I|n|t|e|r|c|e|p|t|o|r|
++-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+
+
+Network Configuration Menu
+- - - - - - - - - - - - - - - - - -
+0. Exit Script
+1. Change Network Interface
+2. Put Interface In Monitor Mode (Needed for wireless atacks)
+3. Put Interface In Manager Mode 
+4. Select wireless network 
+- - - - - - - - - - - - - - - - - -
+
+Atacks Menu
+- - - - - - - - - - - - - - - - - -
+5. Deauther + Bruteforce (Get inside the Wireless network) 
+6. Fake Captive Portal (Deauther + Ap Spofing + Phishing Login)
+7. DoS Attack (Stop the wireless conexions)
+8. Scan Network (Search Devices + Vulnerabilities)
+9. BEeF attack ith Ap Spofing
+10. Evilginx Attack with Ap Spofing
+- - - - - - - - - - - - - - - - - -
+
+
+
+Buscando redes durante 10 segundos...
+[SIMULATED WINDOW] Pocket: redes
+[SIMULATED SCAN] interface=wlan0mon
+0  02:00:00:00:00:01    LAB_TEST           WPA2       10      CCMP      
+Selected complete information:
+02:00:00:00:00:01 LAB_TEST
+You haved selected the interface: wlan0mon  in Mode: Monitor
+The interface wlan0mon has: 2.4 GHz: [✓]
+You have the wireless network LAB_TEST selected with the BSSID: 02:00:00:00:00:01 with the privacy type: WPA2
+
++-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+
+|M|e|n|u| |I|n|t|e|r|c|e|p|t|o|r|
++-+-+-+-+ +-+-+-+-+-+-+-+-+-+-+-+
+
+Network Configuration Menu
+- - - - - - - - - - - - - - - - - -
+0. Exit Script
+1. Change Network Interface
+2. Put Interface In Monitor Mode (Needed for wireless atacks)
+3. Put Interface In Manager Mode 
+4. Select wireless network 
+- - - - - - - - - - - - - - - - - -
+
+Atacks Menu
+- - - - - - - - - - - - - - - - - -
+5. Deauther + Bruteforce (Get inside the Wireless network) 
+6. Fake Captive Portal (Deauther + Ap Spofing + Phishing Login)
+7. DoS Attack (Stop the wireless conexions)
+8. Scan Network (Search Devices + Vulnerabilities)
+9. BEeF attack ith Ap Spofing
+10. Evilginx Attack with Ap Spofing
+- - - - - - - - - - - - - - - - - -
+
+
+👋 Goodbye...
+
+STDERR:

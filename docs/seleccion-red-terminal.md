@@ -40,13 +40,14 @@ no elimina la captura.
 ## Error de wlan0mon
 
 Una ventana distinta no corrige un error `ioctl(SIOCSIFFLAGS): Protocol error`.
-Antes del escaneo se consulta `iw dev INTERFAZ info`, se exige modo monitor y se
-intenta levantar el enlace mediante `ip link set dev INTERFAZ up`. Si falla,
-se detiene el flujo y se conserva el diagnóstico, sin leer CSV antiguos.
+Antes del escaneo se consulta `iw dev INTERFAZ info` y se exige modo monitor.
+Esta comprobación solo lee el modo: no consulta ni modifica el enlace mediante
+`ip`. Tras verificarlo se inicia airodump-ng, como en el flujo anterior. Si el
+escáner falla, se comunica su código de salida sin leer CSV antiguos.
 
 La opción 2 del menú consulta el modo real y busca la interfaz monitor en el
 mismo adaptador físico. No presupone que se llame wlan0mon. Al repetir esa opción
-baja y levanta el enlace monitor para intentar recuperar su estado. La activación
+no modifica el enlace de una interfaz que ya está en modo monitor. La activación
 mediante airmon-ng sigue teniendo los efectos sobre servicios que tenía antes.
 
 Si persiste el error, hacen falta los diagnósticos de la máquina con la tarjeta:
@@ -75,3 +76,15 @@ bash -n lib/wireless_scan.sh
 Las pruebas usan comandos simulados y archivos sintéticos, sin tráfico de red.
 La validación con tarjeta Wi-Fi, emulador gráfico y tmux reales queda pendiente
 para el equipo Linux de destino.
+
+`tests/test_startup_discovery.py` ejecuta el programa completo en una copia
+temporal: arranque, selección de interfaz, menú, opción 4, listado y selección
+de la primera red (ID 0). Cubre una interfaz monitor previa al arranque, tanto
+con nombre `wlan0mon` como `wlan0`, y una interfaz managed cuyo nombre termina
+en `mon`. Verifica que el flujo no llama a airmon-ng ni cambia el enlace.
+También comprueba la ruta de ventana independiente y el fallback con lanzadores
+simulados. Se corrigió la validación que rechazaba el ID 0 mostrado en la lista.
+
+La [transcripción de la prueba](../artifacts/startup-monitor-verification.txt)
+permite revisar el texto del menú y del listado. Es una ejecución con interfaz,
+red y ventana simuladas; no es una captura de pantalla del equipo Linux.

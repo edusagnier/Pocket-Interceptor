@@ -20,7 +20,7 @@ scan_wireless_networks() {
         wireless_scan_error 'No se ha seleccionado una interfaz para el escaneo.'
         return 1
     fi
-    for tool in airodump-ng timeout iw ip; do
+    for tool in airodump-ng timeout iw; do
         if ! command -v "$tool" >/dev/null 2>&1; then
             wireless_scan_error "No se encuentra $tool en PATH."
             return 127
@@ -34,12 +34,8 @@ scan_wireless_networks() {
         wireless_scan_error "$interface no está en modo monitor. Vuelve a activar el modo monitor desde el menú."
         return 1
     fi
-    # Surface driver/rfkill errors before opening a window. Do not continue with
-    # a CSV from another run or assume that a name ending in 'mon' is sufficient.
-    if ! ip link set dev "$interface" up; then
-        wireless_scan_error "No se puede activar $interface. Revisa rfkill list y el controlador (sudo dmesg | tail -n 40); vuelve a crear el modo monitor desde el menú."
-        return 1
-    fi
+    # Read the mode only. airmon-ng handles activation when the user changes
+    # mode; scanning must not introduce extra link up/down operations.
     if ! mkdir -p -- "$output_directory"; then
         wireless_scan_error 'No se puede preparar el directorio de resultados.'
         return 1

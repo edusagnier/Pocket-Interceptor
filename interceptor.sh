@@ -128,9 +128,7 @@ monitor_mode(){
         echo '[ERROR] No se encuentra una interfaz monitor en el adaptador seleccionado.' >&2
         return 1
     fi
-    # Reinitialise a stale monitor link when option 2 is selected again.
-    sudo ip link set dev "$MON_INTERFACE" down || return 1
-    sudo ip link set dev "$MON_INTERFACE" up || return 1
+    # airmon-ng handles activation; an existing monitor needs no link changes.
     printf '[OK] Monitor mode activated in %s\n' "$MON_INTERFACE"
 }
 
@@ -262,7 +260,7 @@ select_wireless(){
     read -p "Enter an ID number to select the wifi: " USER_ID
 
     # Mostrar la información correspondiente al ID
-    if [[ $USER_ID =~ ^[0-9]+$ ]] && [[ $USER_ID -ge 1 ]] && [[ $USER_ID -lt ${#NETWORKS[@]} ]]; then
+    if [[ $USER_ID =~ ^[0-9]+$ ]] && [[ $USER_ID -ge 0 ]] && [[ $USER_ID -lt ${#NETWORKS[@]} ]]; then
         echo "Selected complete information:"
         IFS=',' read -r BSSID Channel Privacy Cipher Auth Beacons ESSID <<< "${NETWORKS[$USER_ID]}"
         
