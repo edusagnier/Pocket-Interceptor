@@ -8,3 +8,5 @@ isc-dhcp-server
 dnsmasq
 php
 nodejs
+python3
+util-linux
