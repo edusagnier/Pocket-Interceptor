@@ -2,6 +2,7 @@
 
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIRECTORY/lib/session.sh" || exit 1
+source "$SCRIPT_DIRECTORY/lib/scanner.sh" || exit 1
 
 RED='\033[0;31m'
 BRED='\033[1;31m'
@@ -1498,7 +1499,7 @@ menu(){
             5) Bruteforce ;;
             6) ./hostapd_testing.sh 3;;
             7) Deauther "0" ;;
-            8) ./netscan.py ;;
+            8) run_network_scanner ;;
             9) ./hostapd_testing.sh 1 ;;
             10) ./hostapd_testing.sh 2 ;;
             0) echo -e "👋 "$BLUE"Goodbye...""$NC"; exit 0 ;;

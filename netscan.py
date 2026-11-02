@@ -2,10 +2,52 @@
 
 import subprocess
 import re
-import requests
 import os
+import sys
+import ipaddress
+from pathlib import Path
 from time import sleep
-from urllib.parse import quote
+
+try:
+    import requests
+except ImportError:
+    requests = None
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+
+
+class ScanError(Exception):
+    """An expected execution failure that should be shown without a traceback."""
+
+
+def validate_target(value, network=False):
+    try:
+        return str(ipaddress.IPv4Network(value, strict=False) if network
+                   else ipaddress.IPv4Address(value))
+    except (ValueError, ipaddress.AddressValueError):
+        raise ScanError("Dirección IPv4 o prefijo de red no válido.") from None
+
+
+def run_nmap(command, timeout):
+    try:
+        result = subprocess.run(command, capture_output=True, text=True,
+                                timeout=timeout, check=True)
+    except FileNotFoundError:
+        raise ScanError("No se encuentra nmap. Comprueba que está instalado y disponible en PATH.") from None
+    except PermissionError:
+        raise ScanError("No hay permiso para ejecutar nmap.") from None
+    except subprocess.TimeoutExpired:
+        raise ScanError(f"Nmap superó el límite de {timeout // 60} minutos; el análisis no se completó.") from None
+    except subprocess.CalledProcessError as error:
+        # Do not let a terminal escape sequence in tool output control the menu.
+        detail = ''.join(c for c in (error.stderr or '') if c.isprintable() or c == '\n')[:1000].strip()
+        raise ScanError(f"Nmap falló con código {error.returncode}." +
+                        (f" Detalle: {detail}" if detail else " Sin detalle adicional.")) from None
+    except OSError:
+        raise ScanError("El sistema no pudo iniciar nmap.") from None
+    if not result.stdout.strip():
+        raise ScanError("Nmap terminó sin salida; no se puede interpretar como una red sin dispositivos.")
+    return parse_nmap_results(result.stdout)
 
 # Lee la clave de la API de NVD desde la variable de entorno.
 NVD_API_KEY = os.getenv('NVD_API_KEY', '')
@@ -34,13 +76,18 @@ def netdisc():
     try:
         print("\nRunning network discovery...")
         # Llama al otro scropt
-        subprocess.run(["bash", "netdisc.sh"], check=True)
-        print("Network discovery completed. Results saved in scan.txt")
+        script = SCRIPT_DIRECTORY / "netdisc.sh"
+        if not script.is_file():
+            raise ScanError("No se encuentra el script netdisc.sh junto al escáner.")
+        subprocess.run(["bash", str(script)], cwd=SCRIPT_DIRECTORY, check=True)
+        print("El menú de descubrimiento ha terminado. Revisa los mensajes y resultados de esa opción.")
     # Manejo de errores si el script falla o no se encuentra
     except subprocess.CalledProcessError as e:
-        print(f"Error during network discovery: {e}")
+        raise ScanError(f"El descubrimiento terminó con código {e.returncode}; revisa el error anterior.") from None
     except FileNotFoundError:
-        print("Error: netdisc.sh script not found")
+        raise ScanError("No se encuentra bash para ejecutar el descubrimiento.") from None
+    except PermissionError:
+        raise ScanError("No hay permiso para ejecutar el script de descubrimiento.") from None
 
 # Función para extraer la parte principal de la versión de un software
 def get_clean_version(version):
@@ -51,6 +98,9 @@ def get_clean_version(version):
 
 # Función principal para verificar CVEs de un servicio y su versión usando la API de NVD
 def check_cve_nvd(service, version):
+    if requests is None:
+        print("[AVISO] Consulta CVE no disponible: falta el paquete Python requests.")
+        return None
     # Obtiene el nombre del producto estándar para la búsqueda
     product = SERVICE_MAPPING.get(service.lower(), service)
     # Obtiene una versión "limpia" para la búsqueda
@@ -88,14 +138,32 @@ def check_cve_nvd(service, version):
 
     # Errores de la petición a la API o del procesamiento de los datos
     except requests.exceptions.RequestException as e:
-        print(f"NVD API request failed: {str(e)}")
-        return []
+        response = getattr(e, 'response', None)
+        status = getattr(response, 'status_code', None)
+        if status == 429:
+            reason = "límite de consultas alcanzado (HTTP 429)"
+        elif status in (401, 403):
+            reason = "acceso rechazado por NVD; revisa la configuración de acceso"
+        elif status is not None:
+            reason = f"respuesta HTTP {status}"
+        else:
+            reason = "fallo de conexión o tiempo de espera"
+        print(f"[AVISO] No se pudo consultar NVD: {reason}.")
+        return None
+    except (ValueError, TypeError, KeyError, AttributeError):
+        print("[AVISO] NVD devolvió una respuesta que no se pudo interpretar.")
+        return None
 
 
 # Define una función para mostrar los resultados del escaneo de dispositivos, incluyendo las CVEs encontradas
 def results(devices, output_file=None):
     # Inicializa una lista para almacenar las líneas del output
     output = []
+
+    if not devices:
+        print("[AVISO] No se han podido extraer dispositivos de la salida. "
+              "Esto no confirma que no existan: el parser actual tiene limitaciones.")
+        return
 
     # Si se encontraron dispositivos, itera sobre ellos
     if devices:
@@ -118,7 +186,9 @@ def results(devices, output_file=None):
 
                 # Busca CVEs para el servicio y la versión
                 cves = check_cve_nvd(service_raw, version)
-                if cves:
+                if cves is None:
+                    print("    Consulta CVE no completada; el estado de vulnerabilidades es desconocido.")
+                elif cves:
                     cve_msg = "    CVEs Found:"
                     print(cve_msg)
                     output.append(cve_msg)
@@ -127,7 +197,7 @@ def results(devices, output_file=None):
                         print(cve_item)
                         output.append(cve_item)
                 else:
-                    no_cve = "    No known CVEs found."
+                    no_cve = "    Sin coincidencias en esta consulta; no confirma ausencia de vulnerabilidades."
                     print(no_cve)
                     output.append(no_cve)
 
@@ -135,38 +205,24 @@ def results(devices, output_file=None):
 # Función para realizar un escaneo de red utilizando la herramienta Nmap.
 def netscan(network):
     print(f"\nScanning network: {network} (this may take several minutes)...\n")
-    try:
-        # Comando Nmap para escanear la red y detectar versiones de servicios
-        command = [
-            "nmap", "-sV", "-T4", "--min-rate", "500",
-            "--max-retries", "2", "-Pn", "-p1-10000", network
-        ]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=3600)
-        # Parsea la salida de Nmap para obtener la información de los dispositivos
-        return parse_nmap_results(result.stdout)
-    # Maneja los errores de tiempo de espera durante la ejecución de Nmap
-    except subprocess.TimeoutExpired:
-        print("Scan timed out after 1 hour")
-        return {}
+    network = validate_target(network, network=True)
+    command = [
+        "nmap", "-sV", "-T4", "--min-rate", "500",
+        "--max-retries", "2", "-Pn", "-p1-10000", network
+    ]
+    return run_nmap(command, timeout=3600)
 
-# Función para escanear un único dispositivo utilizando Nmap
+
 def devscan(ip_address):
     print(f"\nScanning device: {ip_address}\n")
-    try:
-        # Comando Nmap para escanear un dispositivo específico y detectar versiones de servicios
-        command = [
-            "nmap", "-sV", "-T4", "-Pn", "-p-",
-            "--version-intensity", "7", ip_address
-        ]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=1800)
-        # Parsea la salida de Nmap para obtener la información del dispositivo
-        return parse_nmap_results(result.stdout)
-    # Maneja los errores de tiempo de espera o cualquier otra excepción durante la ejecución de Nmap
-    except subprocess.TimeoutExpired:
-        print("Scan timed out after 30 minutes")
-        return {ip_address: []}
+    ip_address = validate_target(ip_address)
+    command = [
+        "nmap", "-sV", "-T4", "-Pn", "-p-",
+        "--version-intensity", "7", ip_address
+    ]
+    return run_nmap(command, timeout=1800)
 
-# Función para analizar la salida de texto de Nmap y extraer información sobre los puertos abiertos, servicios y versiones
+
 def parse_nmap_results(nmap_output):
     devices = {}
     # Define expresiones regulares para encontrar la información relevante en la salida de Nmap
@@ -224,24 +280,27 @@ def menu():
         if choice == "0":
             print("Exiting...")
             exit(0)
-        elif choice == "1":
-            network = input("\nEnter network to scan (e.g., 192.168.1.0/24): ").strip()
-            if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?:/\d{1,2})?$", network):
-                devices = netscan(network)
-                results(devices)
-            else:
-                print("Invalid network format!")
-        elif choice == "2":
-            ip_address = input("\nEnter IP address to scan: ").strip()
-            if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip_address):
-                devices = devscan(ip_address)
-                results(devices)
-            else:
-                print("Invalid IP address format!")
-        elif choice == "3":
-            netdisc()
+        elif choice in ("1", "2", "3"):
+            try:
+                if choice == "1":
+                    network = input("\nEnter network to scan (e.g., 192.168.1.0/24): ").strip()
+                    results(netscan(network))
+                elif choice == "2":
+                    address = input("\nEnter IP address to scan: ").strip()
+                    results(devscan(address))
+                else:
+                    netdisc()
+            except ScanError as error:
+                print(f"[ERROR] {error}")
         else:
             print("Invalid choice! Please enter a number between 0 and 3")
 
+
 if __name__ == "__main__":
-    menu()
+    try:
+        menu()
+    except KeyboardInterrupt:
+        print("\n[AVISO] Escaner cancelado.")
+        sys.exit(130)
+    except EOFError:
+        print("\n[AVISO] Entrada cerrada; se termina el escaner.")
