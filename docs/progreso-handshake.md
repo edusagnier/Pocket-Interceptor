@@ -4,6 +4,17 @@ Antes, `Craking_handshake` redirigía la salida completa a un archivo y el usuar
 no veía el estado durante el análisis. Ahora muestra la interfaz de terminal
 que ofrece la herramienta y conserva una copia de su salida.
 
+El decoder utiliza una ventana independiente (o un panel dentro de tmux).
+En escritorios X11 con `wmctrl`, su ventana se coloca en la mitad derecha
+del área de trabajo, sin mover otras ventanas. En Wayland o sin `wmctrl`,
+la ubicación depende del gestor de ventanas. Si no puede abrir una vista
+separada, conserva el progreso en la pantalla principal.
+
+Al terminar, la ventana del decoder permanece abierta hasta pulsar Enter.
+Si Aircrack-ng informa `KEY FOUND!`, se muestra la línea con su resultado
+tanto allí como en la pantalla principal. No se añade una animación simulada
+ni se cambia el proceso de análisis: se presenta la salida real de la herramienta.
+
 ## Funcionamiento
 
 `lib/live_output.sh` utiliza `script` de util-linux para proporcionar una
@@ -61,7 +72,8 @@ bash -n lib/live_output.sh
 ```
 
 La presentación visual real necesita comprobarse en una terminal Kali.
-En desarrollo han pasado 53 pruebas sin omisiones, incluidas nueve pruebas
-del visor; la sintaxis de los scripts modificados también es correcta.
+Las pruebas cubren la apertura independiente, el resultado encontrado, la
+posición a la derecha con un gestor X11 simulado y la cancelación sin dejar
+abierto el visor. También se comprueba la sintaxis de los scripts modificados.
 
 Referencia del visor: [manual de script](https://man7.org/linux/man-pages/man1/script.1.html).

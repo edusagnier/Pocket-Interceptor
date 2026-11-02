@@ -22,6 +22,8 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+# The decoder uses this to keep its result visible only in a separate view.
+export POCKET_VIEW_SEPARATE=1
 "$@" <&0 &
 child=$!
 wait "$child"

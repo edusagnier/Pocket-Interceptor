@@ -50,6 +50,8 @@ command() {
 }
 VIEW_OUTPUT=$'SIMULATED PROGRESS\nKEY FOUND! [SIMULATED_MATCH]'
 VIEW_STATUS=0
+export VIEW_OUTPUT VIEW_STATUS
+export -f script
 '''
             result = subprocess.run([executable, "-c", setup + body], cwd=directory,
                                     env=env, capture_output=True, text=True,
@@ -65,6 +67,93 @@ VIEW_STATUS=0
         self.assertEqual(len(logs), 1)
         self.assertIn("SIMULATED PROGRESS", logs[0])
         self.assertTrue(capture_exists)
+        self.assertIn("Contraseña encontrada", result.stdout)
+        self.assertIn("KEY FOUND! [SIMULATED_MATCH]", result.stdout)
+
+    def test_decoder_opens_a_separate_view_with_real_tool_result(self):
+        result, logs, capture_exists = self.run_view(r'''
+POCKET_TERMINAL_MODE=auto
+DISPLAY=:synthetic
+TMUX=""
+export VIEW_OUTPUT VIEW_STATUS
+export -f script
+gnome-terminal() {
+    printf 'DECODER_WINDOW\n'
+    while [[ $1 != -- ]]; do shift; done
+    shift
+    unset -f run_decoder_view run_live_output position_decoder_window
+    "$@"
+}
+show_handshake_progress "$VIEW_TMP/input.cap" "$VIEW_TMP/words.txt" "$VIEW_TMP"
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("DECODER_WINDOW", result.stdout)
+        self.assertIn("SIMULATED PROGRESS", result.stdout)
+        self.assertIn("KEY FOUND! [SIMULATED_MATCH]", result.stdout)
+        self.assertIn("Contraseña encontrada", result.stdout)
+        self.assertEqual(len(logs), 1)
+        self.assertTrue(capture_exists)
+
+    def test_decoder_window_is_placed_on_right_half_of_workarea(self):
+        result, _, _ = self.run_view(r'''
+DISPLAY=:synthetic
+TMUX=""
+decoder_title=""
+printf() {
+    if [[ $1 == *']0;'* ]]; then decoder_title=$2; fi
+    builtin printf "$@"
+}
+wmctrl() {
+    case $1 in
+        -d) builtin printf '0 * DG: 1920x1080 VP: 0,0 WA: 0,24 1920x1056 desktop\n' ;;
+        -l) builtin printf '0x000001 0 host unrelated window\n0x000002 0 host %s\n' "$decoder_title" ;;
+        *) builtin printf 'WINDOW_ACTION=%s\n' "$*" ;;
+    esac
+}
+position_decoder_window
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WINDOW_ACTION=-i -r 0x000002 -e 0,960,24,960,1056", result.stdout)
+        self.assertNotIn("-i -r 0x000001", result.stdout)
+
+    def test_tmux_decoder_does_not_move_the_host_window(self):
+        result, _, _ = self.run_view(r'''
+DISPLAY=:synthetic
+TMUX=synthetic
+wmctrl() { printf 'UNEXPECTED_MOVE'; return 1; }
+position_decoder_window
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("UNEXPECTED_MOVE", result.stdout)
+
+    def test_closing_decoder_wrapper_stops_its_progress_viewer(self):
+        result, _, _ = self.run_view(r'''
+trap() {
+    if [[ $1 == decoder_cleanup && $2 == EXIT ]]; then
+        printf '%s' "$BASHPID" > "$VIEW_TMP/decoder_pid"
+    fi
+    builtin trap "$@"
+}
+script() {
+    trap 'printf stopped > "$VIEW_TMP/stopped"; exit 143' TERM
+    printf ready > "$VIEW_TMP/ready"
+    while :; do :; done
+}
+run_decoder_view "$VIEW_REPO/lib/live_output.sh" "$VIEW_TMP/log.txt" printf demo &
+owner=$!
+for ((attempt=0; attempt<100; attempt++)); do
+    [[ ! -f "$VIEW_TMP/ready" ]] || break
+    sleep 0.01
+done
+[[ -f "$VIEW_TMP/ready" ]] || { kill -TERM "$owner"; exit 91; }
+kill -TERM "$(cat "$VIEW_TMP/decoder_pid")"
+wait "$owner"
+status=$?
+if [[ -f "$VIEW_TMP/stopped" ]]; then printf 'DECODER_CHILD_STOPPED\n'; fi
+exit "$status"
+''')
+        self.assertEqual(result.returncode, 143, result.stderr)
+        self.assertIn("DECODER_CHILD_STOPPED", result.stdout)
 
     def test_failure_is_visible_and_status_preserved(self):
         result, logs, capture_exists = self.run_view(r'''
