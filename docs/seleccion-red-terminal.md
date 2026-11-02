@@ -45,6 +45,14 @@ Esta comprobación solo lee el modo: no consulta ni modifica el enlace mediante
 `ip`. Tras verificarlo se inicia airodump-ng, como en el flujo anterior. Si el
 escáner falla, se comunica su código de salida sin leer CSV antiguos.
 
+Cada escaneo conserva stderr en `discovery_XXXXXXXX/scan.stderr.log`, dentro
+del directorio privado de resultados. Si falla, la pantalla principal muestra
+las últimas 40 líneas y la ruta completa del registro, aunque la ventana del
+escaneo se haya cerrado. Se distingue entre un fallo antes de ejecutar la
+herramienta y un fallo de la herramienta. Los mensajes de inicialización o
+`SIOCSIFFLAGS` se muestran como tales; no se atribuye su causa a un controlador
+concreto sin diagnósticos del equipo real.
+
 La opción 2 del menú consulta el modo real y busca la interfaz monitor en el
 mismo adaptador físico. No presupone que se llame wlan0mon. Al repetir esa opción
 no modifica el enlace de una interfaz que ya está en modo monitor. La activación

@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @unittest.skipUnless(os.environ.get("POCKET_TEST_BASH"), "Set POCKET_TEST_BASH")
 class StartupDiscoveryTests(unittest.TestCase):
-    def program(self, interface="wlan0mon", mode="monitor", view="inline", gui_failure=False):
+    def program(self, interface="wlan0mon", mode="monitor", view="inline", gui_failure=False,
+                scan_status=124):
         executable = os.environ["POCKET_TEST_BASH"]
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory)
@@ -22,6 +23,7 @@ class StartupDiscoveryTests(unittest.TestCase):
             shutil.copyfile(ROOT / "tools/session_state.py", fixture / "tools/session_state.py")
             env = dict(os.environ, STARTUP_FIXTURE=fixture.as_posix(), FAKE_INTERFACE=interface,
                        FAKE_MODE=mode, FAKE_GUI_FAIL=str(int(gui_failure)),
+                       FAKE_SCAN_STATUS=str(scan_status),
                        POCKET_TERMINAL_MODE=view, DISPLAY=":synthetic", WAYLAND_DISPLAY="", TMUX="")
             env["PATH"] = str(Path(executable).parent) + os.pathsep + env.get("PATH", "")
             script = r'''
@@ -61,6 +63,10 @@ command() {
 }
 timeout() {
     printf '[SIMULATED SCAN] interface=%s\n' "${@: -4:1}"
+    if [[ $FAKE_SCAN_STATUS == 1 ]]; then
+        printf 'ioctl(SIOCSIFFLAGS) failed: Protocol error\nFailed initializing wireless card(s): wlan0mon\n' >&2
+        return 1
+    fi
     local prefix=""
     while [[ $# -gt 0 ]]; do
         if [[ $1 == -w ]]; then prefix=$2; break; fi
@@ -81,7 +87,7 @@ gnome-terminal() {
 export -f timeout
 source "$STARTUP_FIXTURE/interceptor.sh"
 '''
-            inputs = "1\n4\n0\nn\n0\n" if mode == "monitor" else "1\n4\n0\n"
+            inputs = "1\n4\n0\nn\n0\n" if mode == "monitor" and scan_status == 124 else "1\n4\n0\n"
             result = subprocess.run([executable, "-c", script], env=env, cwd=directory,
                                     input=inputs.encode("utf-8"), capture_output=True, timeout=15)
             result.stdout = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout.decode("utf-8"))
@@ -122,3 +128,13 @@ source "$STARTUP_FIXTURE/interceptor.sh"
         result = self.program(view="auto", gui_failure=True)
         self.assert_monitor_startup(result, "wlan0mon")
         self.assertIn("continuando en esta terminal", result.stderr)
+
+    def test_scanner_error_survives_the_separate_window_closing(self):
+        result = self.program(view="auto", scan_status=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("[SIMULATED WINDOW]", result.stdout)
+        self.assertIn("ioctl(SIOCSIFFLAGS) failed: Protocol error", result.stderr)
+        self.assertIn("Failed initializing wireless card(s): wlan0mon", result.stderr)
+        self.assertIn("código 1", result.stderr)
+        self.assertIn("scan.stderr.log", result.stderr)
+        self.assertNotIn("Selected complete information", result.stdout)

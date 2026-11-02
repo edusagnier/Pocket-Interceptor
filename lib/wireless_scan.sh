@@ -11,10 +11,18 @@ wireless_scan_error() {
     fi
 }
 
+wireless_scan_command() (
+    # Keep the scanner's diagnostics outside the disposable terminal window.
+    local error_log=$1
+    shift
+    umask 077
+    "$@" 2>"$error_log"
+)
+
 scan_wireless_networks() {
     local interface=$1
     local output_directory=$2
-    local tool scan_directory status info
+    local tool scan_directory status info error_log
     WIRELESS_SCAN_FILE=""
     if [[ -z "$interface" ]]; then
         wireless_scan_error 'No se ha seleccionado una interfaz para el escaneo.'
@@ -44,15 +52,32 @@ scan_wireless_networks() {
         wireless_scan_error 'No se puede crear el directorio privado del escaneo.'
         return 1
     }
+    error_log="$scan_directory/scan.stderr.log"
     printf '\nBuscando redes durante 10 segundos...\n'
-    run_process_view 'Pocket: redes' timeout --foreground 10 airodump-ng -w "$scan_directory/networks" \
+    printf 'Registro de diagnóstico: %s\n' "$error_log"
+    run_process_view 'Pocket: redes' wireless_scan_command "$error_log" \
+        timeout --foreground 10 airodump-ng -w "$scan_directory/networks" \
         --output-format csv "$interface" --ignore-negative-one --band abg
     status=$?
     # GNU timeout reports 124 when the requested observation period is complete.
     case "$status" in
         0|124) ;;
         130) wireless_scan_error 'Escaneo cancelado por el usuario.'; return 130 ;;
-        *) wireless_scan_error "El escaneo terminó con código $status. Revisa el mensaje anterior."; return "$status" ;;
+        *)
+            if [[ -s "$error_log" ]]; then
+                printf '\nDiagnóstico del escáner (últimas 40 líneas):\n' >&2
+                tail -n 40 -- "$error_log" >&2
+                if grep -Eq 'ioctl\(SIOCSIFFLAGS\)|Failed initializing wireless card|RTNETLINK.*Protocol error' "$error_log"; then
+                    printf '[DIAGNÓSTICO] La herramienta no ha podido activar o inicializar %s. Detectar modo monitor no garantiza que el adaptador esté operativo.\n' "$interface" >&2
+                fi
+            elif [[ ! -f "$error_log" ]]; then
+                printf '[DIAGNÓSTICO] La vista terminó antes de ejecutar el escáner.\n' >&2
+            else
+                printf '[DIAGNÓSTICO] La herramienta no escribió detalles en stderr.\n' >&2
+            fi
+            wireless_scan_error "El escaneo terminó con código $status. Registro: $error_log"
+            return "$status"
+            ;;
     esac
     if [[ ! -f "$scan_directory/networks-01.csv" || ! -r "$scan_directory/networks-01.csv" || ! -s "$scan_directory/networks-01.csv" ]]; then
         wireless_scan_error 'El escaneo no generó un CSV legible con resultados.'

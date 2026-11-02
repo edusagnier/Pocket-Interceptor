@@ -48,6 +48,9 @@ timeout() {
         printf 'ARG=%s\n' "$arg"
     done
     if [[ "$FAKE_CSV" == yes ]]; then printf 'SIMULATED_CSV\n' > "${prefix}-01.csv"; fi
+    if [[ "$FAKE_STATUS" == 1 ]]; then
+        printf 'ioctl(SIOCSIFFLAGS) failed: Protocol error\nFailed initializing wireless card(s): wlan0mon\n' >&2
+    fi
     return "$FAKE_STATUS"
 }
 x-terminal-emulator() { printf GUI_MUST_NOT_RUN; return 91; }
@@ -107,6 +110,15 @@ exit "$status"
         result = self.run_scan(status=2)
         self.assertEqual(result.returncode, 2)
         self.assertIn("código 2", result.stderr)
+        self.assertIn("RESULT=\n", result.stdout)
+
+    def test_protocol_error_is_replayed_in_main_terminal_with_log_path(self):
+        result = self.run_scan(status=1)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ioctl(SIOCSIFFLAGS) failed: Protocol error", result.stderr)
+        self.assertIn("Failed initializing wireless card(s): wlan0mon", result.stderr)
+        self.assertIn("scan.stderr.log", result.stderr)
+        self.assertIn("activar o inicializar", result.stderr)
         self.assertIn("RESULT=\n", result.stdout)
 
     def test_missing_csv_does_not_reuse_previous_scan(self):
