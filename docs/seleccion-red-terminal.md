@@ -8,7 +8,14 @@ segundos y las opciones del escaneo anterior, con resultados privados por ejecuc
 - Dentro de tmux, divide la ventana en paneles visibles simultáneamente.
 - En escritorio, abre ventanas de GNOME Terminal o del emulador predeterminado.
 - Sin entorno gráfico o si el emulador no arranca el comando, usa la pantalla
-  principal. No depende de wmctrl, del título ni de la resolución del monitor.
+  principal.
+
+En X11 con `wmctrl`, el lanzador común coloca cada vista en su cuadrante:
+proceso de radio arriba a la izquierda, captura arriba a la derecha,
+redes abajo a la izquierda y decoder abajo a la derecha. Se usa un título
+único por ejecución para mover solo la ventana correspondiente. Si falta
+`wmctrl` o el gestor no permite mover ventanas, se muestra un aviso; en tmux
+se conservan los paneles sin intentar mover la ventana del terminal.
 
 El proceso confirma que ha arrancado. Si no lo hace en tres segundos, se utiliza
 la pantalla principal. Una marca atómica evita ejecutar dos veces el mismo comando
@@ -23,7 +30,7 @@ sudo tmux new-session -s pocket 'bash ./interceptor.sh'
 ```
 
 Si tmux no está instalado, es opcional (`sudo apt install tmux`). En escritorio
-se abren ventanas independientes, que se pueden colocar lado a lado. No se exige
+se abren ventanas independientes, que se colocan como se indica arriba. No se exige
 un emulador concreto que soporte pestañas. Para forzar la pantalla principal:
 
 ```bash

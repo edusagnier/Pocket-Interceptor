@@ -46,34 +46,6 @@ run_live_output_process() {
     return "$status"
 }
 
-position_decoder_window() {
-    # Give this window a unique title rather than moving another Pocket window.
-    local title="Pocket-decoder-${BASHPID}-${RANDOM}"
-    printf '\033]0;%s\007' "$title"
-    [[ -z ${TMUX:-} ]] || return 0
-    [[ -n ${DISPLAY:-} ]] && command -v wmctrl >/dev/null 2>&1 || return 0
-    local workarea origin size x y width height window="" attempt
-    workarea=$(wmctrl -d 2>/dev/null | awk '$2 == "*" {
-        for (i=1; i<=NF; i++) if ($i == "WA:") {print $(i+1), $(i+2); exit}
-    }')
-    read -r origin size <<< "$workarea"
-    [[ $origin =~ ^([0-9]+),([0-9]+)$ ]] || return 0
-    x=${BASH_REMATCH[1]}
-    y=${BASH_REMATCH[2]}
-    [[ $size =~ ^([0-9]+)x([0-9]+)$ ]] || return 0
-    width=${BASH_REMATCH[1]}
-    height=${BASH_REMATCH[2]}
-    ((width > 1 && height > 0)) || return 0
-    for ((attempt=0; attempt<10; attempt++)); do
-        window=$(wmctrl -l 2>/dev/null | awk -v title="$title" 'index($0,title) {print $1; exit}')
-        [[ -z $window ]] || break
-        sleep 0.1
-    done
-    [[ $window =~ ^0x[[:xdigit:]]+$ ]] || return 0
-    wmctrl -i -r "$window" -b remove,maximized_vert,maximized_horz 2>/dev/null || true
-    wmctrl -i -r "$window" -e "0,$((x + width / 2)),$y,$((width - width / 2)),$height" 2>/dev/null || true
-}
-
 run_decoder_view() {
     local library=$1 logfile=$2 status progress_pid=""
     shift 2
@@ -93,9 +65,6 @@ run_decoder_view() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP
-    if [[ ${POCKET_VIEW_SEPARATE:-0} == 1 ]]; then
-        position_decoder_window
-    fi
     printf '\nDecoder: progreso en directo de aircrack-ng.\n'
     run_live_output_process "$logfile" "$@" <&0 &
     progress_pid=$!
@@ -121,7 +90,7 @@ show_handshake_progress() (
     local capture=$1
     local wordlist=$2
     local output_directory=$3
-    local logfile status
+    local essid=${4:-} safe_essid logfile status analysis_directory capture_hash capture_id
     if ! command -v aircrack-ng >/dev/null 2>&1; then
         printf '[ERROR] No se encuentra aircrack-ng.\n' >&2
         return 127
@@ -135,10 +104,35 @@ show_handshake_progress() (
         return 1
     fi
     umask 077
-    logfile=$(mktemp "$output_directory/result_handshake_XXXXXXXX.txt") || {
-        printf '[ERROR] No se puede crear el registro de resultados.\n' >&2
-        return 1
-    }
+    if [[ -n "$essid" ]]; then
+        if ! command -v sha256sum >/dev/null 2>&1; then
+            printf '[ERROR] Falta sha256sum (coreutils) para identificar la captura.\n' >&2
+            return 127
+        fi
+        capture_hash=$(sha256sum < "$capture") || {
+            printf '[ERROR] No se puede calcular el identificador de la captura.\n' >&2
+            return 1
+        }
+        capture_hash=${capture_hash%% *}
+        [[ $capture_hash =~ ^[[:xdigit:]]{64}$ ]] || return 1
+        capture_id=${capture_hash:0:12}
+        analysis_directory=$(mktemp -d "$output_directory/analysis_XXXXXXXX") || {
+            printf '[ERROR] No se puede crear el directorio de resultados.\n' >&2
+            return 1
+        }
+        # Keep readable names while removing path separators and control chars.
+        safe_essid=${essid//[^[:alnum:]_. -]/_}
+        logfile="$analysis_directory/results_${safe_essid}_handshake_${capture_id}.txt"
+        : > "$logfile" || return 1
+        printf '\nRed analizada (ESSID): %s\n' "$essid"
+        printf 'Identificador de la captura: %s\n' "$capture_id"
+    else
+        # Preserve the standalone viewer API when no network was supplied.
+        logfile=$(mktemp "$output_directory/result_handshake_XXXXXXXX.txt") || {
+            printf '[ERROR] No se puede crear el registro de resultados.\n' >&2
+            return 1
+        }
+    fi
     printf '\nAnálisis local del handshake: progreso en directo.\n'
     printf 'Se abrirá una ventana con el progreso y el resultado del decoder.\n'
     printf 'Pulsa Ctrl+C para detener el análisis; se conservarán la captura y el registro.\n'

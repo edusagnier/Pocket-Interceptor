@@ -6,13 +6,20 @@ run_process_view() (
     local title=$1
     shift
     local directory launcher="" worker="" status=1 line attempt
+    local slot=${POCKET_VIEW_SLOT:-1} window_title="$title [$BASHPID-$RANDOM]"
+    case "$title" in
+        'Pocket: proceso de radio') slot=1 ;;
+        'Pocket: captura') slot=2 ;;
+        'Pocket: redes') slot=3 ;;
+        'Pocket: decoder') slot=4 ;;
+    esac
     local -a launch=()
     if [[ ${POCKET_TERMINAL_MODE:-auto} != inline ]]; then
         if [[ -n ${TMUX:-} ]] && command -v tmux >/dev/null 2>&1; then
             launch=(tmux)
         elif [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]]; then
             if command -v gnome-terminal >/dev/null 2>&1; then
-                launch=(gnome-terminal --wait --window --title="$title" --)
+                launch=(gnome-terminal --wait --window --title="$window_title" --)
             elif command -v x-terminal-emulator >/dev/null 2>&1; then
                 launch=(x-terminal-emulator -e)
             fi
@@ -52,10 +59,10 @@ run_process_view() (
     trap 'exit 143' TERM
     trap 'exit 129' HUP
     if [[ ${launch[0]} == tmux ]]; then
-        printf -v line '%q ' "$BASH" "$PROCESS_VIEW_DIRECTORY/process_worker.sh" "$directory" "$@"
+        printf -v line '%q ' "$BASH" "$PROCESS_VIEW_DIRECTORY/process_worker.sh" "$directory" "$slot" "$window_title" "$@"
         tmux split-window -h -d "$line" &
     else
-        "${launch[@]}" "$BASH" "$PROCESS_VIEW_DIRECTORY/process_worker.sh" "$directory" "$@" &
+        "${launch[@]}" "$BASH" "$PROCESS_VIEW_DIRECTORY/process_worker.sh" "$directory" "$slot" "$window_title" "$@" &
     fi
     launcher=$!
     # A successful launcher exit does not prove that its window ran the command.

@@ -5,7 +5,7 @@ no veía el estado durante el análisis. Ahora muestra la interfaz de terminal
 que ofrece la herramienta y conserva una copia de su salida.
 
 El decoder utiliza una ventana independiente (o un panel dentro de tmux).
-En escritorios X11 con `wmctrl`, su ventana se coloca en la mitad derecha
+En escritorios X11 con `wmctrl`, su ventana se coloca en el cuadrante inferior derecho
 del área de trabajo, sin mover otras ventanas. En Wayland o sin `wmctrl`,
 la ubicación depende del gestor de ventanas. Si no puede abrir una vista
 separada, conserva el progreso en la pantalla principal.
@@ -19,8 +19,19 @@ ni se cambia el proceso de análisis: se presenta la salida real de la herramien
 
 `lib/live_output.sh` utiliza `script` de util-linux para proporcionar una
 terminal virtual. Así la herramienta conserva su presentación de terminal,
-mientras el registro se guarda en `data_collected/network_dump/` con un nombre
-aleatorio `result_handshake_XXXXXXXX.txt`. El comando se construye con argumentos
+mientras el registro se guarda en una carpeta nueva por ejecución dentro de
+`data_collected/network_dump/analysis_XXXXXXXX/`. Desde el menú, el archivo se
+llama `results_<ESSID>_handshake_<ID>.txt`, usando el nombre de la red y los
+primeros 12 caracteres del SHA-256 del archivo de captura; por ejemplo,
+`results_Mi Wifi_handshake_a1b2c3d4e5f6.txt`. El ID identifica el archivo completo,
+sin afirmar que contenga un handshake válido. Una carpeta nueva por ejecución
+evita sobrescrituras incluso si se vuelve a analizar la misma captura.
+Los separadores de ruta y los caracteres no válidos para
+el nombre del archivo se sustituyen por guiones bajos.
+Así se identifica la red y se conservan los
+análisis anteriores sin sobrescribirlos. El visor independiente mantiene
+`result_handshake_XXXXXXXX.txt` cuando no recibe un ESSID.
+El comando se construye con argumentos
 escapados para Bash y el visor devuelve el código de salida del proceso.
 
 La pantalla muestra las métricas que publique la versión instalada de Aircrack-ng.
@@ -73,7 +84,7 @@ bash -n lib/live_output.sh
 
 La presentación visual real necesita comprobarse en una terminal Kali.
 Las pruebas cubren la apertura independiente, el resultado encontrado, la
-posición a la derecha con un gestor X11 simulado y la cancelación sin dejar
+posición en un cuadrante con un gestor X11 simulado y la cancelación sin dejar
 abierto el visor. También se comprueba la sintaxis de los scripts modificados.
 
 Referencia del visor: [manual de script](https://man7.org/linux/man-pages/man1/script.1.html).

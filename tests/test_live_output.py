@@ -1,5 +1,6 @@
 """Presentation tests only, with synthetic files and simulated commands."""
 
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -70,6 +71,49 @@ export -f script
         self.assertIn("Contraseña encontrada", result.stdout)
         self.assertIn("KEY FOUND! [SIMULATED_MATCH]", result.stdout)
 
+    def test_results_are_named_by_essid_and_previous_runs_are_preserved(self):
+        result, _, capture_exists = self.run_view(r'''
+for attempt in 1 2; do
+    show_handshake_progress "$VIEW_TMP/input.cap" "$VIEW_TMP/words.txt" "$VIEW_TMP" 'Mi Wifi' || exit $?
+done
+count=0
+for logfile in "$VIEW_TMP"/analysis_*/'results_Mi Wifi_handshake_'*.txt; do
+    [[ -f "$logfile" ]] || exit 91
+    grep -Fq 'SIMULATED PROGRESS' "$logfile" || exit 92
+    count=$((count + 1))
+done
+printf 'NETWORK_RESULTS=%s\n' "$count"
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("NETWORK_RESULTS=2", result.stdout)
+        self.assertIn("Red analizada (ESSID): Mi Wifi", result.stdout)
+        capture_id = hashlib.sha256(b"synthetic input, not a handshake").hexdigest()[:12]
+        self.assertIn(f"results_Mi Wifi_handshake_{capture_id}.txt", result.stdout)
+        self.assertTrue(capture_exists)
+
+    def test_essid_path_separators_are_sanitized(self):
+        result, logs, _ = self.run_view(r'''
+show_handshake_progress "$VIEW_TMP/input.cap" "$VIEW_TMP/words.txt" "$VIEW_TMP" 'My/Wifi:Test' || exit $?
+for logfile in "$VIEW_TMP"/analysis_*/results_My_Wifi_Test_handshake_*.txt; do
+    [[ -f "$logfile" ]] || exit 91
+    printf 'SAFE_RESULT_NAME\n'
+done
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("SAFE_RESULT_NAME", result.stdout)
+        self.assertEqual(logs, [])
+
+    def test_different_captures_have_different_identifiers_for_same_essid(self):
+        result, _, _ = self.run_view(r'''
+show_handshake_progress "$VIEW_TMP/input.cap" "$VIEW_TMP/words.txt" "$VIEW_TMP" 'Mi Wifi' || exit $?
+printf 'a second synthetic capture' > "$VIEW_TMP/input.cap"
+show_handshake_progress "$VIEW_TMP/input.cap" "$VIEW_TMP/words.txt" "$VIEW_TMP" 'Mi Wifi'
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for capture in (b"synthetic input, not a handshake", b"a second synthetic capture"):
+            capture_id = hashlib.sha256(capture).hexdigest()[:12]
+            self.assertIn(f"results_Mi Wifi_handshake_{capture_id}.txt", result.stdout)
+
     def test_decoder_opens_a_separate_view_with_real_tool_result(self):
         result, logs, capture_exists = self.run_view(r'''
 POCKET_TERMINAL_MODE=auto
@@ -93,38 +137,6 @@ show_handshake_progress "$VIEW_TMP/input.cap" "$VIEW_TMP/words.txt" "$VIEW_TMP"
         self.assertIn("Contraseña encontrada", result.stdout)
         self.assertEqual(len(logs), 1)
         self.assertTrue(capture_exists)
-
-    def test_decoder_window_is_placed_on_right_half_of_workarea(self):
-        result, _, _ = self.run_view(r'''
-DISPLAY=:synthetic
-TMUX=""
-decoder_title=""
-printf() {
-    if [[ $1 == *']0;'* ]]; then decoder_title=$2; fi
-    builtin printf "$@"
-}
-wmctrl() {
-    case $1 in
-        -d) builtin printf '0 * DG: 1920x1080 VP: 0,0 WA: 0,24 1920x1056 desktop\n' ;;
-        -l) builtin printf '0x000001 0 host unrelated window\n0x000002 0 host %s\n' "$decoder_title" ;;
-        *) builtin printf 'WINDOW_ACTION=%s\n' "$*" ;;
-    esac
-}
-position_decoder_window
-''')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("WINDOW_ACTION=-i -r 0x000002 -e 0,960,24,960,1056", result.stdout)
-        self.assertNotIn("-i -r 0x000001", result.stdout)
-
-    def test_tmux_decoder_does_not_move_the_host_window(self):
-        result, _, _ = self.run_view(r'''
-DISPLAY=:synthetic
-TMUX=synthetic
-wmctrl() { printf 'UNEXPECTED_MOVE'; return 1; }
-position_decoder_window
-''')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn("UNEXPECTED_MOVE", result.stdout)
 
     def test_closing_decoder_wrapper_stops_its_progress_viewer(self):
         result, _, _ = self.run_view(r'''

@@ -136,5 +136,6 @@ source "$STARTUP_FIXTURE/interceptor.sh"
         self.assertIn("ioctl(SIOCSIFFLAGS) failed: Protocol error", result.stderr)
         self.assertIn("Failed initializing wireless card(s): wlan0mon", result.stderr)
         self.assertIn("código 1", result.stderr)
+        self.assertIn("La opción 4 terminó con código 1", result.stderr)
         self.assertIn("scan.stderr.log", result.stderr)
         self.assertNotIn("Selected complete information", result.stdout)

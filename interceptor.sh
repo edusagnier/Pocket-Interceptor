@@ -352,7 +352,8 @@ Craking_handshake(){
     show_handshake_progress \
         "$SCRIPT_DIRECTORY/data_collected/network_dump/wificapture-01.cap" \
         "/usr/share/wordlists/rockyou.txt" \
-        "$SCRIPT_DIRECTORY/data_collected/network_dump"
+        "$SCRIPT_DIRECTORY/data_collected/network_dump" \
+        "$ESSID_VAR"
     status=$?
     if [[ -t 0 ]]; then
         read -r -p 'Pulsa Enter para volver al menu... ' _ || true
@@ -1304,6 +1305,7 @@ menu(){
     fi
     
     BOOL_SELECTION=true
+    local menu_action_status
 
     while $BOOL_SELECTION; do
         clear    
@@ -1403,6 +1405,13 @@ menu(){
             0) echo -e "👋 "$BLUE"Goodbye...""$NC"; exit 0 ;;
             *) echo -e ""$BRED"[✗]"$NC" Not valid option." ; sleep 2 ;;
         esac
+        menu_action_status=$?
+        if [[ $menu_action_status -ne 0 ]]; then
+            printf '\n[ERROR] La opción %s terminó con código %s. Los mensajes anteriores corresponden a esta ejecución.\n' "$SELECTION" "$menu_action_status" >&2
+            if [[ -t 0 ]]; then
+                read -r -p 'Pulsa Enter para volver al menú... ' _ || true
+            fi
+        fi
     done
 
 }

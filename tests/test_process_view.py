@@ -1,5 +1,6 @@
 """Terminal routing tests with synthetic commands; no network tools run."""
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -81,3 +82,13 @@ synthetic_wrapper() { printf 'WRAPPER=%s\n' "$1"; return 9; }
 ''', "run_process_view decoder synthetic_wrapper 'with spaces'\n")
         self.assertEqual(result.returncode, 9, result.stderr)
         self.assertIn("WRAPPER=with spaces", result.stdout)
+
+    def test_views_receive_distinct_layout_slots(self):
+        result = self.view("", r'''
+slot_probe() { printf 'SLOT=%s\n' "$slot"; }
+for title in 'Pocket: proceso de radio' 'Pocket: captura' 'Pocket: redes' 'Pocket: decoder'; do
+    run_process_view "$title" slot_probe || exit $?
+done
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(re.findall(r"SLOT=(\d+)", result.stdout), ["1", "2", "3", "4"])
