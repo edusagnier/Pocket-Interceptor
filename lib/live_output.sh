@@ -1,5 +1,6 @@
 #!/bin/bash
 # Display a local command's native terminal UI while retaining its output.
+source "$(dirname -- "${BASH_SOURCE[0]}")/process_view.sh" || return 1
 
 run_live_output() (
     local logfile=$1
@@ -65,7 +66,7 @@ show_handshake_progress() (
     printf 'La herramienta mostrará su estado; no es un descifrado carácter a carácter.\n'
     printf 'Pulsa Ctrl+C para detener el análisis; se conservarán la captura y el registro.\n'
     printf 'Registro privado: %s\n\n' "$logfile"
-    run_live_output "$logfile" aircrack-ng "$capture" -w "$wordlist"
+    run_process_view 'Pocket: decoder' run_live_output "$logfile" aircrack-ng "$capture" -w "$wordlist"
     status=$?
     printf '\nRegistro guardado: %s\n' "$logfile"
     if [[ $status -eq 130 || $status -eq 143 || $status -eq 129 ]]; then

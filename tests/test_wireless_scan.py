@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @unittest.skipUnless(os.environ.get("POCKET_TEST_BASH"), "Set POCKET_TEST_BASH for Bash tests")
 class WirelessDiscoveryTests(unittest.TestCase):
-    def run_scan(self, status=124, create_csv=True, missing_tool="", interface="wlan0mon"):
+    def run_scan(self, status=124, create_csv=True, missing_tool="", interface="wlan0mon",
+                 interface_type="monitor", missing_interface=False, link_failure=False):
         executable = os.environ["POCKET_TEST_BASH"]
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output with spaces"
@@ -20,7 +21,10 @@ class WirelessDiscoveryTests(unittest.TestCase):
             # A failed scan must not reuse an older result.
             (output / "networks-01.csv").write_text("STALE_RESULT")
             env = dict(os.environ, WIRELESS_REPO=ROOT.as_posix(), WIRELESS_OUTPUT=output.as_posix(),
+                       POCKET_TERMINAL_MODE="inline",
                        FAKE_STATUS=str(status), FAKE_CSV="yes" if create_csv else "no",
+                       FAKE_TYPE=interface_type, FAKE_IW_STATUS=str(int(missing_interface)),
+                       FAKE_IP_STATUS=str(int(link_failure)),
                        FAKE_MISSING=missing_tool, FAKE_INTERFACE=interface)
             env["PATH"] = str(Path(executable).parent) + os.pathsep + env.get("PATH", "")
             body = r'''
@@ -28,9 +32,11 @@ set +o posix
 source "$WIRELESS_REPO/lib/wireless_scan.sh" || exit 90
 command() {
     if [[ "$1" == -v && "$2" == "$FAKE_MISSING" ]]; then return 1; fi
-    if [[ "$1" == -v && ( "$2" == airodump-ng || "$2" == timeout ) ]]; then return 0; fi
+    if [[ "$1" == -v && ( "$2" == airodump-ng || "$2" == timeout || "$2" == iw || "$2" == ip ) ]]; then return 0; fi
     builtin command "$@"
 }
+iw() { printf 'Interface synthetic\n\ttype %s\n' "$FAKE_TYPE"; return "$FAKE_IW_STATUS"; }
+ip() { return "$FAKE_IP_STATUS"; }
 timeout() {
     local prefix="" arg expect_prefix=no
     for arg in "$@"; do
@@ -65,6 +71,27 @@ exit "$status"
         result = self.run_scan(status=0)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_monitor_mode_does_not_require_mon_suffix(self):
+        self.assertEqual(self.run_scan(interface="wlan0").returncode, 0)
+
+    def test_mon_suffix_does_not_prove_monitor_mode(self):
+        result = self.run_scan(interface_type="managed")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("modo monitor", result.stderr)
+        self.assertNotIn("ARG=", result.stdout)
+
+    def test_missing_interface_is_reported_before_scan(self):
+        result = self.run_scan(missing_interface=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no está disponible", result.stderr)
+        self.assertNotIn("ARG=", result.stdout)
+
+    def test_driver_activation_failure_stops_before_scan(self):
+        result = self.run_scan(link_failure=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("rfkill", result.stderr)
+        self.assertNotIn("ARG=", result.stdout)
+
     def test_tool_failure_is_not_reported_as_a_success(self):
         result = self.run_scan(status=2)
         self.assertEqual(result.returncode, 2)
@@ -83,7 +110,7 @@ exit "$status"
         self.assertIn("cancelado", result.stderr)
 
     def test_missing_dependencies_are_reported(self):
-        for tool in ("airodump-ng", "timeout"):
+        for tool in ("airodump-ng", "timeout", "iw", "ip"):
             with self.subTest(tool=tool):
                 result = self.run_scan(missing_tool=tool)
                 self.assertEqual(result.returncode, 127)

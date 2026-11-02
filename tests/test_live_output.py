@@ -20,7 +20,8 @@ class LiveOutputTests(unittest.TestCase):
             if fixture:
                 (folder / "input.cap").write_text("synthetic input, not a handshake")
                 (folder / "words.txt").write_text("synthetic word")
-            env = dict(os.environ, VIEW_REPO=ROOT.as_posix(), VIEW_TMP=folder.as_posix())
+            env = dict(os.environ, VIEW_REPO=ROOT.as_posix(), VIEW_TMP=folder.as_posix(),
+                       POCKET_TERMINAL_MODE="inline")
             env["PATH"] = str(Path(executable).parent) + os.pathsep + env.get("PATH", "")
             setup = r'''
 source "$VIEW_REPO/lib/live_output.sh" || exit 90
