@@ -6,6 +6,9 @@ La primera entrega incorpora la recuperació de les sessions del portal.
 Consulta [els canvis, el funcionament i les proves](docs/cambios-sesion.md)
 per conèixer l'abast i les limitacions d'aquesta versió.
 
+L'opció 6 ofereix un [portal educatiu local amb comptes ficticis](docs/portal-laboratorio.md).
+Es pot provar sense permisos root amb `python3 -B tools/lab_portal.py`.
+
 **Pocket-Interceptor** és una eina d’auditoria Wi-Fi desenvolupada en Bash, pensada per facilitar l’anàlisi, supervisió i atac en entorns de xarxes sense fils. Ofereix una interfície en terminal intuïtiva que simplifica tasques típiques de pentesting com l’activació del mode monitor, escaneig de xarxes, atac deauther, força bruta i desplegament de portals captius.
 
 ---
