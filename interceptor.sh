@@ -5,7 +5,6 @@ source "$SCRIPT_DIRECTORY/lib/session.sh" || exit 1
 source "$SCRIPT_DIRECTORY/lib/scanner.sh" || exit 1
 source "$SCRIPT_DIRECTORY/lib/live_output.sh" || exit 1
 source "$SCRIPT_DIRECTORY/lib/wireless_scan.sh" || exit 1
-source "$SCRIPT_DIRECTORY/lib/lab_portal.sh" || exit 1
 
 RED='\033[0;31m'
 BRED='\033[1;31m'
@@ -1382,7 +1381,7 @@ menu(){
         echo "Atacks Menu"
         echo -e "- - - - - - - - - - - - - - - - - -""$NC"
         echo -e "$CYAN""5."$NC" Deauther + Bruteforce (Get inside the Wireless network) "
-        echo -e "$CYAN""6."$NC" Portal de laboratorio (cuentas ficticias, solo local)"
+        echo -e "$CYAN""6."$NC" Fake Captive Portal (Deauther + Ap Spofing + Phishing Login)"
         echo -e "$CYAN""7."$NC" DoS Attack (Stop the wireless conexions)"
         echo -e "$CYAN""8."$NC" Scan Network (Search Devices + Vulnerabilities)"
         echo -e "$CYAN""9."$NC" BEeF attack ith Ap Spofing"
@@ -1398,7 +1397,7 @@ menu(){
             3) manager_mode ;;
             4) select_wireless ;;
             5) Bruteforce ;;
-            6) run_lab_portal ;;
+            6) ./hostapd_testing.sh 3;;
             7) Deauther "0" & ;;
             8) run_network_scanner ;;
             9) ./hostapd_testing.sh 1 ;;
